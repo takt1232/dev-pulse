@@ -1,0 +1,6 @@
+{
+  "name": "DevPulse - Task & Bug Tracker",
+  "description": "A friction-free developer task, bug, and ticket tracker with quick capture, screenshot pasting, Kanban board with drag-and-drop, list view, comment threads, and activity feeds.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
