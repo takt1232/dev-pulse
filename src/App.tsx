@@ -25,6 +25,10 @@ import {
   loadNotifications,
   loadTasks,
   loadActiveUserId,
+  loadUsers,
+  saveUsers,
+  loadIsAuthenticated,
+  saveIsAuthenticated,
   saveActivities,
   saveComments,
   saveNotifications,
@@ -44,14 +48,19 @@ import { TaskDetailModal } from './components/TaskDetailModal';
 import { BulkActionBar } from './components/BulkActionBar';
 import { NotificationDropdown } from './components/NotificationDropdown';
 import { ShortcutsModal } from './components/ShortcutsModal';
+import { AuthModal } from './components/AuthModal';
 
 export default function App() {
   // App state
+  const [users, setUsers] = useState<User[]>(() => loadUsers());
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => loadIsAuthenticated());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeUserId, setActiveUserId] = useState<string>(loadActiveUserId());
+  const [activeUserId, setActiveUserId] = useState<string>(() => loadActiveUserId());
 
   const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [swimlaneMode, setSwimlaneMode] = useState<SwimlaneMode>('none');
@@ -106,12 +115,32 @@ export default function App() {
 
   // Active user helper
   const activeUser = useMemo(() => {
-    return USERS.find((u) => u.id === activeUserId) || USERS[0];
-  }, [activeUserId]);
+    return users.find((u) => u.id === activeUserId) || users[0] || USERS[0];
+  }, [activeUserId, users]);
 
   const handleActiveUserChange = (user: User) => {
     setActiveUserId(user.id);
     saveActiveUserId(user.id);
+  };
+
+  const handleLogin = (user: User) => {
+    setActiveUserId(user.id);
+    saveActiveUserId(user.id);
+    setIsAuthenticated(true);
+    saveIsAuthenticated(true);
+    setIsAuthModalOpen(false);
+  };
+
+  const handleRegister = (newUser: User) => {
+    const updatedUsers = [...users, newUser];
+    setUsers(updatedUsers);
+    saveUsers(updatedUsers);
+  };
+
+  const handleSignOut = () => {
+    setIsAuthenticated(false);
+    saveIsAuthenticated(false);
+    setIsAuthModalOpen(true);
   };
 
   // Global Keyboard Shortcuts
@@ -522,7 +551,10 @@ export default function App() {
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         activeUser={activeUser}
+        allUsers={users}
         onActiveUserChange={handleActiveUserChange}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onSignOut={handleSignOut}
         notifications={activeUserNotifications}
         unreadCount={unreadNotifsCount}
         onOpenNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)}
@@ -644,6 +676,16 @@ export default function App() {
         onBulkAssign={handleBulkAssign}
         onBulkPriorityChange={handleBulkPriorityChange}
         onBulkDelete={handleBulkDelete}
+      />
+
+      {/* Authentication Modal */}
+      <AuthModal
+        isOpen={!isAuthenticated || isAuthModalOpen}
+        allowDismiss={isAuthenticated}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        allUsers={users}
       />
     </div>
   );

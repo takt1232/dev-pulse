@@ -7,6 +7,8 @@ const STORAGE_KEYS = {
   ACTIVITIES: 'devpulse_activities_v1',
   NOTIFICATIONS: 'devpulse_notifications_v1',
   ACTIVE_USER_ID: 'devpulse_active_user_v1',
+  USERS: 'devpulse_users_v1',
+  IS_AUTHENTICATED: 'devpulse_is_authenticated_v1',
 };
 
 // Seed sample tasks
@@ -331,10 +333,48 @@ export const saveNotifications = (notifs: Notification[]) => {
   }
 };
 
+export const loadUsers = (): User[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.USERS);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.error('Failed to load users', e);
+  }
+  saveUsers(USERS);
+  return USERS;
+};
+
+export const saveUsers = (users: User[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+  } catch (e) {
+    console.error('Failed to save users', e);
+  }
+};
+
+export const loadIsAuthenticated = (): boolean => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.IS_AUTHENTICATED);
+    if (raw !== null) return JSON.parse(raw);
+  } catch (e) {
+    console.error('Failed to load auth status', e);
+  }
+  return true; // Default to signed-in on initial launch for friction-free exploration
+};
+
+export const saveIsAuthenticated = (status: boolean) => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.IS_AUTHENTICATED, JSON.stringify(status));
+  } catch (e) {
+    console.error('Failed to save auth status', e);
+  }
+};
+
 export const loadActiveUserId = (): string => {
   try {
+    const users = loadUsers();
     const id = localStorage.getItem(STORAGE_KEYS.ACTIVE_USER_ID);
-    if (id && USERS.some(u => u.id === id)) return id;
+    if (id && users.some((u) => u.id === id)) return id;
   } catch (e) {
     console.error('Failed to load active user id', e);
   }
@@ -355,5 +395,7 @@ export const resetAllData = () => {
   localStorage.removeItem(STORAGE_KEYS.ACTIVITIES);
   localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
   localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER_ID);
+  localStorage.removeItem(STORAGE_KEYS.USERS);
+  localStorage.removeItem(STORAGE_KEYS.IS_AUTHENTICATED);
   window.location.reload();
 };
