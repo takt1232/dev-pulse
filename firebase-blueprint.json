@@ -1,0 +1,117 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Registered workspace developer accounts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Task": {
+      "title": "Task / Bug Ticket",
+      "description": "Developer task, issue, or bug record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "key": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "type": { "type": "string" },
+        "assignee": { "$ref": "#/entities/UserProfile" },
+        "reporter": { "$ref": "#/entities/UserProfile" },
+        "labels": { "type": "array", "items": { "type": "string" } },
+        "points": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "attachments": { "type": "array", "items": { "type": "object" } },
+        "checklist": { "type": "array", "items": { "type": "object" } },
+        "parentTaskId": { "type": "string" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "key", "title", "status", "priority", "type", "reporter", "createdAt", "updatedAt"]
+    },
+    "Comment": {
+      "title": "Task Comment",
+      "description": "Discussion comment on a task",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "taskId": { "type": "string" },
+        "author": { "$ref": "#/entities/UserProfile" },
+        "content": { "type": "string" },
+        "attachments": { "type": "array", "items": { "type": "object" } },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "taskId", "author", "content", "createdAt"]
+    },
+    "ActivityItem": {
+      "title": "Activity Audit Log",
+      "description": "Audit event for task state changes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "taskId": { "type": "string" },
+        "taskKey": { "type": "string" },
+        "taskTitle": { "type": "string" },
+        "user": { "$ref": "#/entities/UserProfile" },
+        "action": { "type": "string" },
+        "field": { "type": "string" },
+        "oldValue": { "type": "string" },
+        "newValue": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "taskId", "taskKey", "user", "action", "timestamp"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app developer notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "taskId": { "type": "string" },
+        "taskKey": { "type": "string" },
+        "taskTitle": { "type": "string" },
+        "triggeredBy": { "$ref": "#/entities/UserProfile" },
+        "type": { "type": "string" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "taskId", "taskKey", "triggeredBy", "type", "message", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Collection of workspace user profiles"
+    },
+    "tasks": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Collection of tasks and bugs"
+    },
+    "comments": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Collection of task comments"
+    },
+    "activities": {
+      "schema": { "$ref": "#/entities/ActivityItem" },
+      "description": "Collection of activity logs"
+    },
+    "notifications": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Collection of user notifications"
+    }
+  }
+}

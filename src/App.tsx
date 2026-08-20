@@ -18,24 +18,29 @@ import {
   User,
   ViewMode,
 } from './types';
-import { USERS } from './utils/constants';
 import {
-  loadActivities,
-  loadComments,
-  loadNotifications,
-  loadTasks,
-  loadActiveUserId,
-  loadUsers,
-  saveUsers,
-  loadIsAuthenticated,
-  saveIsAuthenticated,
-  saveActivities,
-  saveComments,
-  saveNotifications,
-  saveTasks,
-  saveActiveUserId,
-  resetAllData,
-} from './utils/storage';
+  auth,
+  subscribeToAuth,
+  subscribeToTasks,
+  subscribeToComments,
+  subscribeToActivities,
+  subscribeToNotifications,
+  subscribeToUsers,
+  createTaskInFirestore,
+  updateTaskInFirestore,
+  deleteTaskInFirestore,
+  bulkUpdateTasksInFirestore,
+  bulkDeleteTasksInFirestore,
+  addCommentToFirestore,
+  updateCommentInFirestore,
+  deleteCommentInFirestore,
+  addActivityToFirestore,
+  addNotificationToFirestore,
+  markNotificationReadInFirestore,
+  markAllNotificationsReadInFirestore,
+  upsertUserProfileInFirestore,
+  logoutUser,
+} from './firebase';
 
 import { Header } from './components/Header';
 import { FilterBar } from './components/FilterBar';
@@ -52,15 +57,15 @@ import { AuthModal } from './components/AuthModal';
 
 export default function App() {
   // App state
-  const [users, setUsers] = useState<User[]>(() => loadUsers());
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => loadIsAuthenticated());
+  const [users, setUsers] = useState<User[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeUserId, setActiveUserId] = useState<string>(() => loadActiveUserId());
+  const [activeUserId, setActiveUserId] = useState<string>('');
 
   const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [swimlaneMode, setSwimlaneMode] = useState<SwimlaneMode>('none');
@@ -81,65 +86,113 @@ export default function App() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
-  // Initialize data from local storage
+  // Subscribe to Firebase Auth changes
   useEffect(() => {
-    setTasks(loadTasks());
-    setComments(loadComments());
-    setActivities(loadActivities());
-    setNotifications(loadNotifications());
+    const unsubscribeAuth = subscribeToAuth((fbUser) => {
+      if (fbUser) {
+        setIsAuthenticated(true);
+        setActiveUserId(fbUser.uid);
+        setIsAuthModalOpen(false);
+      } else {
+        setIsAuthenticated(false);
+        setActiveUserId('');
+        setIsAuthModalOpen(true);
+      }
+    });
+
+    return () => unsubscribeAuth();
   }, []);
 
-  // Save tasks to storage on change
-  const updateTasks = useCallback((newTasks: Task[]) => {
-    setTasks(newTasks);
-    saveTasks(newTasks);
-  }, []);
+  // Real-time Firestore subscriptions
+  useEffect(() => {
+    if (!isAuthenticated) return;
 
-  // Save comments to storage on change
-  const updateComments = useCallback((newComments: Comment[]) => {
-    setComments(newComments);
-    saveComments(newComments);
-  }, []);
+    const unsubTasks = subscribeToTasks(
+      (items) => setTasks(items),
+      (err) => console.error('Tasks sync error', err)
+    );
 
-  // Save activities to storage on change
-  const updateActivities = useCallback((newActivities: ActivityItem[]) => {
-    setActivities(newActivities);
-    saveActivities(newActivities);
-  }, []);
+    const unsubComments = subscribeToComments(
+      (items) => setComments(items),
+      (err) => console.error('Comments sync error', err)
+    );
 
-  // Save notifications to storage on change
-  const updateNotifications = useCallback((newNotifs: Notification[]) => {
-    setNotifications(newNotifs);
-    saveNotifications(newNotifs);
-  }, []);
+    const unsubActivities = subscribeToActivities(
+      (items) => setActivities(items),
+      (err) => console.error('Activities sync error', err)
+    );
+
+    const unsubUsers = subscribeToUsers(
+      (items) => setUsers(items),
+      (err) => console.error('Users sync error', err)
+    );
+
+    const unsubNotifs = subscribeToNotifications(
+      activeUserId,
+      (items) => setNotifications(items),
+      (err) => console.error('Notifications sync error', err)
+    );
+
+    return () => {
+      unsubTasks();
+      unsubComments();
+      unsubActivities();
+      unsubUsers();
+      unsubNotifs();
+    };
+  }, [isAuthenticated, activeUserId]);
 
   // Active user helper
   const activeUser = useMemo(() => {
-    return users.find((u) => u.id === activeUserId) || users[0] || USERS[0];
+    return (
+      users.find((u) => u.id === activeUserId) ||
+      (auth.currentUser
+        ? {
+            id: auth.currentUser.uid,
+            name: auth.currentUser.displayName || 'Developer',
+            email: auth.currentUser.email || 'developer@workspace.dev',
+            avatar:
+              auth.currentUser.photoURL ||
+              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+            role: 'Software Engineer',
+          }
+        : {
+            id: 'user-default',
+            name: 'Developer',
+            email: 'developer@workspace.dev',
+            avatar:
+              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+            role: 'Software Engineer',
+          })
+    );
   }, [activeUserId, users]);
 
   const handleActiveUserChange = (user: User) => {
     setActiveUserId(user.id);
-    saveActiveUserId(user.id);
   };
 
   const handleLogin = (user: User) => {
     setActiveUserId(user.id);
-    saveActiveUserId(user.id);
     setIsAuthenticated(true);
-    saveIsAuthenticated(true);
     setIsAuthModalOpen(false);
+    upsertUserProfileInFirestore(user).catch(console.error);
   };
 
   const handleRegister = (newUser: User) => {
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    saveUsers(updatedUsers);
+    setActiveUserId(newUser.id);
+    setIsAuthenticated(true);
+    setIsAuthModalOpen(false);
+    upsertUserProfileInFirestore(newUser).catch(console.error);
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    try {
+      await logoutUser();
+    } catch (e) {
+      console.error(e);
+    }
     setIsAuthenticated(false);
-    saveIsAuthenticated(false);
+    setActiveUserId('');
     setIsAuthModalOpen(true);
   };
 
@@ -190,7 +243,7 @@ export default function App() {
   }, []);
 
   // Add a new task (Generates next DEV-xxx key)
-  const handleAddTask = (
+  const handleAddTask = async (
     taskData: Omit<Task, 'id' | 'key' | 'createdAt' | 'updatedAt' | 'order'>
   ) => {
     // Determine next ticket number
@@ -216,8 +269,15 @@ export default function App() {
       order: tasks.length,
     };
 
-    const newTasks = [newTask, ...tasks];
-    updateTasks(newTasks);
+    // Optimistic UI update
+    setTasks((prev) => [newTask, ...prev]);
+
+    // Save to Firestore
+    try {
+      await createTaskInFirestore(newTask);
+    } catch (e) {
+      console.error('Failed to create task in Firestore', e);
+    }
 
     // Create activity log
     const newActivity: ActivityItem = {
@@ -228,7 +288,7 @@ export default function App() {
       description: `created ticket ${nextKey}`,
       createdAt: timestamp,
     };
-    updateActivities([newActivity, ...activities]);
+    addActivityToFirestore(newActivity).catch(console.error);
 
     // Create notification if assigned to another team member
     if (taskData.assigneeId && taskData.assigneeId !== activeUser.id) {
@@ -244,20 +304,27 @@ export default function App() {
         read: false,
         createdAt: timestamp,
       };
-      updateNotifications([newNotif, ...notifications]);
+      addNotificationToFirestore(newNotif).catch(console.error);
     }
   };
 
   // Update existing task
-  const handleUpdateTask = (updatedTask: Task) => {
+  const handleUpdateTask = async (updatedTask: Task) => {
     const prevTask = tasks.find((t) => t.id === updatedTask.id);
     const timestamp = new Date().toISOString();
-    const newTasks = tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
-    updateTasks(newTasks);
+
+    // Optimistic UI update
+    setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
 
     // If modal is open, keep selectedTask in sync
     if (selectedTask?.id === updatedTask.id) {
       setSelectedTask(updatedTask);
+    }
+
+    try {
+      await updateTaskInFirestore(updatedTask.id, updatedTask);
+    } catch (e) {
+      console.error('Failed to update task in Firestore', e);
     }
 
     if (!prevTask) return;
@@ -274,33 +341,37 @@ export default function App() {
         description: `changed status from ${prevTask.status.replace('_', ' ')} to ${updatedTask.status.replace('_', ' ')}`,
         createdAt: timestamp,
       };
-      updateActivities([newActivity, ...activities]);
+      addActivityToFirestore(newActivity).catch(console.error);
 
-      // If status changed to Done, notify reporter
-      if (
-        updatedTask.status === 'done' &&
-        updatedTask.reporterId &&
-        updatedTask.reporterId !== activeUser.id
-      ) {
-        const notif: Notification = {
-          id: `notif-${Date.now()}`,
-          recipientId: updatedTask.reporterId,
-          actorId: activeUser.id,
-          taskId: updatedTask.id,
-          taskKey: updatedTask.key,
-          taskTitle: updatedTask.title,
-          type: 'status_done',
-          message: `marked ${updatedTask.key} as Done`,
-          read: false,
-          createdAt: timestamp,
-        };
-        updateNotifications([notif, ...notifications]);
+      // If status changed to Done, celebrate and notify reporter
+      if (updatedTask.status === 'done') {
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.8 },
+        });
+
+        if (updatedTask.reporterId && updatedTask.reporterId !== activeUser.id) {
+          const notif: Notification = {
+            id: `notif-${Date.now()}`,
+            recipientId: updatedTask.reporterId,
+            actorId: activeUser.id,
+            taskId: updatedTask.id,
+            taskKey: updatedTask.key,
+            taskTitle: updatedTask.title,
+            type: 'status_done',
+            message: `marked ${updatedTask.key} as Done`,
+            read: false,
+            createdAt: timestamp,
+          };
+          addNotificationToFirestore(notif).catch(console.error);
+        }
       }
     }
 
     // Track assignee change activity
     if (prevTask.assigneeId !== updatedTask.assigneeId) {
-      const newAssignee = USERS.find((u) => u.id === updatedTask.assigneeId);
+      const newAssignee = users.find((u) => u.id === updatedTask.assigneeId);
       const newActivity: ActivityItem = {
         id: `act-${Date.now()}`,
         taskId: updatedTask.id,
@@ -310,7 +381,7 @@ export default function App() {
         description: `assigned to ${newAssignee?.name || 'Unassigned'}`,
         createdAt: timestamp,
       };
-      updateActivities([newActivity, ...activities]);
+      addActivityToFirestore(newActivity).catch(console.error);
 
       // Notify new assignee
       if (updatedTask.assigneeId && updatedTask.assigneeId !== activeUser.id) {
@@ -326,7 +397,7 @@ export default function App() {
           read: false,
           createdAt: timestamp,
         };
-        updateNotifications([notif, ...notifications]);
+        addNotificationToFirestore(notif).catch(console.error);
       }
     }
   };
@@ -343,19 +414,23 @@ export default function App() {
   };
 
   // Delete task
-  const handleDeleteTask = (taskId: string) => {
-    updateTasks(tasks.filter((t) => t.id !== taskId));
-    updateComments(comments.filter((c) => c.taskId !== taskId));
-    updateActivities(activities.filter((a) => a.taskId !== taskId));
-    updateNotifications(notifications.filter((n) => n.taskId !== taskId));
+  const handleDeleteTask = async (taskId: string) => {
+    // Optimistic UI updates
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
     setSelectedTaskIds((prev) => prev.filter((id) => id !== taskId));
     if (selectedTask?.id === taskId) {
       setSelectedTask(null);
     }
+
+    try {
+      await deleteTaskInFirestore(taskId);
+    } catch (e) {
+      console.error('Failed to delete task in Firestore', e);
+    }
   };
 
   // Comments management
-  const handleAddComment = (taskId: string, content: string) => {
+  const handleAddComment = async (taskId: string, content: string) => {
     const targetTask = tasks.find((t) => t.id === taskId);
     const timestamp = new Date().toISOString();
 
@@ -367,7 +442,8 @@ export default function App() {
       createdAt: timestamp,
     };
 
-    updateComments([...comments, newComment]);
+    setComments((prev) => [...prev, newComment]);
+    addCommentToFirestore(newComment).catch(console.error);
 
     // Add activity
     const newAct: ActivityItem = {
@@ -378,10 +454,10 @@ export default function App() {
       description: `commented on ${targetTask?.key || 'task'}`,
       createdAt: timestamp,
     };
-    updateActivities([newAct, ...activities]);
+    addActivityToFirestore(newAct).catch(console.error);
 
     // Check for @mentions in comment content
-    USERS.forEach((u) => {
+    users.forEach((u) => {
       const firstName = u.name.split(' ')[0].toLowerCase();
       if (content.toLowerCase().includes(`@${firstName}`) && u.id !== activeUser.id) {
         const notif: Notification = {
@@ -396,26 +472,21 @@ export default function App() {
           read: false,
           createdAt: timestamp,
         };
-        updateNotifications([notif, ...notifications]);
+        addNotificationToFirestore(notif).catch(console.error);
       }
     });
   };
 
   const handleUpdateComment = (commentId: string, newContent: string) => {
-    updateComments(
-      comments.map((c) =>
-        c.id === commentId ? { ...c, content: newContent, updatedAt: new Date().toISOString() } : c
-      )
-    );
+    updateCommentInFirestore(commentId, newContent).catch(console.error);
   };
 
   const handleDeleteComment = (commentId: string) => {
-    updateComments(comments.filter((c) => c.id !== commentId));
+    deleteCommentInFirestore(commentId).catch(console.error);
   };
 
   // Convert a comment into a new task
   const handleConvertCommentToTask = (commentContent: string, parentTaskKey: string) => {
-    // Strip markdown formatting for initial title
     const firstLine = commentContent.split('\n')[0].replace(/[@#*`]/g, '').trim();
     const title = firstLine.length > 80 ? `${firstLine.substring(0, 77)}...` : firstLine;
 
@@ -441,38 +512,44 @@ export default function App() {
     );
   };
 
-  const handleBulkStatusChange = (newStatus: TaskStatus) => {
-    const timestamp = new Date().toISOString();
-    const newTasks = tasks.map((t) =>
-      selectedTaskIds.includes(t.id) ? { ...t, status: newStatus, updatedAt: timestamp } : t
-    );
-    updateTasks(newTasks);
+  const handleBulkStatusChange = async (newStatus: TaskStatus) => {
+    const idsToUpdate = [...selectedTaskIds];
     setSelectedTaskIds([]);
+    try {
+      await bulkUpdateTasksInFirestore(idsToUpdate, { status: newStatus });
+    } catch (e) {
+      console.error('Failed bulk status change', e);
+    }
   };
 
-  const handleBulkAssign = (newAssigneeId: string | null) => {
-    const timestamp = new Date().toISOString();
-    const newTasks = tasks.map((t) =>
-      selectedTaskIds.includes(t.id)
-        ? { ...t, assigneeId: newAssigneeId, updatedAt: timestamp }
-        : t
-    );
-    updateTasks(newTasks);
+  const handleBulkAssign = async (newAssigneeId: string | null) => {
+    const idsToUpdate = [...selectedTaskIds];
     setSelectedTaskIds([]);
+    try {
+      await bulkUpdateTasksInFirestore(idsToUpdate, { assigneeId: newAssigneeId });
+    } catch (e) {
+      console.error('Failed bulk assign', e);
+    }
   };
 
-  const handleBulkPriorityChange = (newPriority: TaskPriority) => {
-    const timestamp = new Date().toISOString();
-    const newTasks = tasks.map((t) =>
-      selectedTaskIds.includes(t.id) ? { ...t, priority: newPriority, updatedAt: timestamp } : t
-    );
-    updateTasks(newTasks);
+  const handleBulkPriorityChange = async (newPriority: TaskPriority) => {
+    const idsToUpdate = [...selectedTaskIds];
     setSelectedTaskIds([]);
+    try {
+      await bulkUpdateTasksInFirestore(idsToUpdate, { priority: newPriority });
+    } catch (e) {
+      console.error('Failed bulk priority change', e);
+    }
   };
 
-  const handleBulkDelete = () => {
-    updateTasks(tasks.filter((t) => !selectedTaskIds.includes(t.id)));
+  const handleBulkDelete = async () => {
+    const idsToDelete = [...selectedTaskIds];
     setSelectedTaskIds([]);
+    try {
+      await bulkDeleteTasksInFirestore(idsToDelete);
+    } catch (e) {
+      console.error('Failed bulk delete', e);
+    }
   };
 
   // Notifications
@@ -480,18 +557,12 @@ export default function App() {
   const unreadNotifsCount = activeUserNotifications.filter((n) => !n.read).length;
 
   const handleMarkAllNotificationsRead = () => {
-    const updated = notifications.map((n) =>
-      n.recipientId === activeUser.id ? { ...n, read: true } : n
-    );
-    updateNotifications(updated);
+    markAllNotificationsReadInFirestore(activeUser.id).catch(console.error);
   };
 
   const handleSelectNotification = (notif: Notification) => {
-    // Mark as read
-    const updated = notifications.map((n) => (n.id === notif.id ? { ...n, read: true } : n));
-    updateNotifications(updated);
+    markNotificationReadInFirestore(notif.id).catch(console.error);
 
-    // Open target task
     const task = tasks.find((t) => t.id === notif.taskId);
     if (task) {
       setSelectedTask(task);
@@ -529,8 +600,8 @@ export default function App() {
       // Assignees filter
       if (filters.assignees.length > 0) {
         const matchesAssignee =
-          (filters.assignees.includes('unassigned') && !task.assigneeId) ||
-          (task.assigneeId && filters.assignees.includes(task.assigneeId));
+          (task.assigneeId && filters.assignees.includes(task.assigneeId)) ||
+          (!task.assigneeId && filters.assignees.includes('unassigned'));
         if (!matchesAssignee) return false;
       }
 
@@ -564,7 +635,7 @@ export default function App() {
         }}
         searchQuery={filters.search}
         onSearchChange={(q) => setFilters({ ...filters, search: q })}
-        onResetData={resetAllData}
+        onResetData={handleSignOut}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
       />
 

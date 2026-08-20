@@ -263,41 +263,45 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                   </div>
 
-                  <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Switch Workspace Member
-                  </div>
+                  {allUsers.length > 1 && (
+                    <>
+                      <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        Switch Workspace Member
+                      </div>
 
-                  <div className="max-h-48 overflow-y-auto py-1">
-                    {allUsers.map((user) => {
-                      const isCurrent = user.id === activeUser.id;
-                      return (
-                        <button
-                          key={user.id}
-                          type="button"
-                          onClick={() => {
-                            onActiveUserChange(user);
-                            setUserDropdownOpen(false);
-                          }}
-                          className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors ${
-                            isCurrent
-                              ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold'
-                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                          }`}
-                        >
-                          <img
-                            src={user.avatar}
-                            alt={user.name}
-                            className="w-6 h-6 rounded-full object-cover"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="truncate text-xs">{user.name}</div>
-                            <div className="text-[10px] text-slate-400 truncate">{user.role}</div>
-                          </div>
-                          {isCurrent && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
-                        </button>
-                      );
-                    })}
-                  </div>
+                      <div className="max-h-48 overflow-y-auto py-1">
+                        {allUsers.map((user) => {
+                          const isCurrent = user.id === activeUser.id;
+                          return (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => {
+                                onActiveUserChange(user);
+                                setUserDropdownOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors ${
+                                isCurrent
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold'
+                                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                              }`}
+                            >
+                              <img
+                                src={user.avatar}
+                                alt={user.name}
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="truncate text-xs">{user.name}</div>
+                                <div className="text-[10px] text-slate-400 truncate">{user.role}</div>
+                              </div>
+                              {isCurrent && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
 
                   {/* Auth Actions */}
                   <div className="border-t border-slate-100 dark:border-slate-700/60 mt-1 pt-1.5 px-2 space-y-1">
@@ -334,7 +338,7 @@ export const Header: React.FC<HeaderProps> = ({
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/40 transition-colors"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Reset Sample Board</span>
+                      <span>Clear Workspace Data</span>
                     </button>
                   </div>
                 </div>
