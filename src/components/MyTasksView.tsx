@@ -11,17 +11,22 @@ interface MyTasksViewProps {
   onSelectTask: (task: Task) => void;
   onMoveTaskStatus: (taskId: string, targetStatus: TaskStatus) => void;
   onQuickAdd: () => void;
+  allUsers?: User[];
 }
 
 export const MyTasksView: React.FC<MyTasksViewProps> = ({
-  tasks,
-  comments,
+  tasks = [],
+  comments = [],
   activeUser,
   onSelectTask,
   onMoveTaskStatus,
   onQuickAdd,
+  allUsers = [],
 }) => {
-  const myTasks = tasks.filter((t) => t.assigneeId === activeUser.id);
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
+  const safeComments = Array.isArray(comments) ? comments : [];
+
+  const myTasks = safeTasks.filter((t) => t.assigneeId === activeUser.id);
 
   const inProgressTasks = myTasks.filter((t) => t.status === 'in_progress');
   const todoTasks = myTasks.filter((t) => t.status === 'todo' || t.status === 'backlog');
@@ -31,7 +36,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
   const urgentCount = myTasks.filter((t) => t.priority === 'urgent' && t.status !== 'done').length;
 
   const getCommentsCount = (taskId: string) => {
-    return comments.filter((c) => c.taskId === taskId).length;
+    return safeComments.filter((c) => c.taskId === taskId).length;
   };
 
   return (
@@ -127,6 +132,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                 task={task}
                 commentsCount={getCommentsCount(task.id)}
                 onSelectTask={onSelectTask}
+                allUsers={allUsers}
               />
             ))}
           </div>
@@ -156,6 +162,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                 task={task}
                 commentsCount={getCommentsCount(task.id)}
                 onSelectTask={onSelectTask}
+                allUsers={allUsers}
               />
             ))}
           </div>
@@ -179,6 +186,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                 task={task}
                 commentsCount={getCommentsCount(task.id)}
                 onSelectTask={onSelectTask}
+                allUsers={allUsers}
               />
             ))}
           </div>
@@ -202,6 +210,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                 task={task}
                 commentsCount={getCommentsCount(task.id)}
                 onSelectTask={onSelectTask}
+                allUsers={allUsers}
               />
             ))}
           </div>

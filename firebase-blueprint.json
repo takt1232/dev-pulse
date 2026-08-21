@@ -14,12 +14,31 @@
       },
       "required": ["id", "name", "email", "role"]
     },
+    "Project": {
+      "title": "Project Workspace",
+      "description": "Multi-tenant project workspace with owner and collaborators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "key": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" },
+        "icon": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "collaboratorIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "key", "ownerId", "createdAt", "updatedAt"]
+    },
     "Task": {
       "title": "Task / Bug Ticket",
       "description": "Developer task, issue, or bug record",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "projectId": { "type": "string" },
         "key": { "type": "string" },
         "title": { "type": "string" },
         "description": { "type": "string" },
@@ -38,7 +57,7 @@
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
-      "required": ["id", "key", "title", "status", "priority", "type", "reporter", "createdAt", "updatedAt"]
+      "required": ["id", "projectId", "key", "title", "status", "priority", "type", "reporter", "createdAt", "updatedAt"]
     },
     "Comment": {
       "title": "Task Comment",
@@ -96,6 +115,10 @@
     "users": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "Collection of workspace user profiles"
+    },
+    "projects": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Collection of multi-tenant project workspaces"
     },
     "tasks": {
       "schema": { "$ref": "#/entities/Task" },

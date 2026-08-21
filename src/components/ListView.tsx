@@ -13,9 +13,10 @@ import {
   ArrowDown,
   Trash2,
   X,
+  Lock,
 } from 'lucide-react';
-import { Comment, Task, TaskPriority, TaskStatus, TaskType } from '../types';
-import { PRIORITIES, STATUSES, TYPES, USERS } from '../utils/constants';
+import { Comment, isOwnerUser, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
+import { PRIORITIES, STATUSES, TYPES } from '../utils/constants';
 
 interface ListViewProps {
   tasks: Task[];
@@ -27,25 +28,31 @@ interface ListViewProps {
   onToggleSelectTask: (taskId: string, e: React.MouseEvent) => void;
   onSelectAll: (allIds: string[]) => void;
   onClearSelection: () => void;
+  allUsers?: User[];
+  activeUser: User;
 }
 
 type SortField = 'key' | 'title' | 'type' | 'priority' | 'status' | 'assignee' | 'updatedAt';
 type SortOrder = 'asc' | 'desc';
 
 export const ListView: React.FC<ListViewProps> = ({
-  tasks,
-  comments,
+  tasks = [],
+  comments = [],
   onSelectTask,
   onUpdateTask,
   onDeleteTask,
-  selectedTaskIds,
+  selectedTaskIds = [],
   onToggleSelectTask,
   onSelectAll,
   onClearSelection,
+  allUsers = [],
+  activeUser,
 }) => {
   const [sortField, setSortField] = useState<SortField>('updatedAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+
+  const isOwner = isOwnerUser(activeUser);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -90,8 +97,8 @@ export const ListView: React.FC<ListViewProps> = ({
         break;
       }
       case 'assignee': {
-        const nameA = USERS.find((u) => u.id === a.assigneeId)?.name || 'zzz';
-        const nameB = USERS.find((u) => u.id === b.assigneeId)?.name || 'zzz';
+        const nameA = allUsers.find((u) => u.id === a.assigneeId)?.name || 'zzz';
+        const nameB = allUsers.find((u) => u.id === b.assigneeId)?.name || 'zzz';
         comparison = nameA.localeCompare(nameB);
         break;
       }
@@ -237,7 +244,7 @@ export const ListView: React.FC<ListViewProps> = ({
             ) : (
               sortedTasks.map((task) => {
                 const isSelected = selectedTaskIds.includes(task.id);
-                const assignee = USERS.find((u) => u.id === task.assigneeId);
+                const assignee = allUsers.find((u) => u.id === task.assigneeId);
                 const typeObj = TYPES.find((t) => t.id === task.type);
                 const priorityObj = PRIORITIES.find((p) => p.id === task.priority);
                 const statusObj = STATUSES.find((s) => s.id === task.status);
@@ -349,18 +356,24 @@ export const ListView: React.FC<ListViewProps> = ({
                     <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
                       <select
                         value={task.status}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const newStatus = e.target.value as TaskStatus;
+                          if (!isOwner && newStatus === 'done') return;
                           onUpdateTask({
                             ...task,
-                            status: e.target.value as TaskStatus,
+                            status: newStatus,
                             updatedAt: new Date().toISOString(),
-                          })
-                        }
+                          });
+                        }}
                         className={`text-[11px] font-semibold px-2 py-1 rounded-lg border cursor-pointer ${statusObj?.bg} ${statusObj?.color}`}
                       >
                         {STATUSES.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.label}
+                          <option
+                            key={s.id}
+                            value={s.id}
+                            disabled={!isOwner && s.id === 'done'}
+                          >
+                            {s.label} {!isOwner && s.id === 'done' ? '🔒' : ''}
                           </option>
                         ))}
                       </select>
@@ -368,24 +381,36 @@ export const ListView: React.FC<ListViewProps> = ({
 
                     {/* Assignee */}
                     <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={task.assigneeId || ''}
-                        onChange={(e) =>
-                          onUpdateTask({
-                            ...task,
-                            assigneeId: e.target.value || null,
-                            updatedAt: new Date().toISOString(),
-                          })
-                        }
-                        className="text-[11px] font-medium px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 max-w-[130px] truncate cursor-pointer"
-                      >
-                        <option value="">Unassigned</option>
-                        {USERS.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name}
-                          </option>
-                        ))}
-                      </select>
+                      {isOwner ? (
+                        <select
+                          value={task.assigneeId || ''}
+                          onChange={(e) =>
+                            onUpdateTask({
+                              ...task,
+                              assigneeId: e.target.value || null,
+                              updatedAt: new Date().toISOString(),
+                            })
+                          }
+                          className="text-[11px] font-medium px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 max-w-[130px] truncate cursor-pointer"
+                        >
+                          <option value="">Unassigned</option>
+                          {allUsers.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div
+                          className="text-[11px] font-medium px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 max-w-[130px] flex items-center justify-between gap-1 cursor-not-allowed opacity-90"
+                          title="Collaborators cannot assign tasks"
+                        >
+                          <span className="truncate">
+                            {allUsers.find((u) => u.id === task.assigneeId)?.name || 'Unassigned'}
+                          </span>
+                          <Lock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                        </div>
+                      )}
                     </td>
 
                     {/* Updated At */}

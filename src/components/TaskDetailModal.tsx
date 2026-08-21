@@ -23,9 +23,12 @@ import {
   Image as ImageIcon,
   CheckCheck,
   Share2,
+  Lock,
+  Crown,
+  AlertCircle,
 } from 'lucide-react';
-import { ActivityItem, Attachment, Comment, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
-import { COMMON_LABELS, PRIORITIES, STATUSES, TYPES, USERS } from '../utils/constants';
+import { ActivityItem, Attachment, Comment, isOwnerUser, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
+import { COMMON_LABELS, PRIORITIES, STATUSES, TYPES } from '../utils/constants';
 import { MarkdownRenderer } from '../utils/markdown';
 
 interface TaskDetailModalProps {
@@ -41,6 +44,7 @@ interface TaskDetailModalProps {
   onConvertCommentToTask: (commentContent: string, parentTaskKey: string) => void;
   activities: ActivityItem[];
   activeUser: User;
+  allUsers?: User[];
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -56,8 +60,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onConvertCommentToTask,
   activities,
   activeUser,
+  allUsers = [],
 }) => {
   if (!isOpen || !task) return null;
+
+  const isOwner = isOwnerUser(activeUser);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleText, setTitleText] = useState(task.title);
@@ -75,6 +82,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [newLabelInput, setNewLabelInput] = useState('');
   const [isAddingLabel, setIsAddingLabel] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
 
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +94,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     setIsEditingTitle(false);
     setIsEditingDesc(false);
     setCommentInput('');
+    setPermissionNotice(null);
   }, [task.id]);
 
   // Handle paste for screenshots anywhere inside task detail
@@ -165,6 +174,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   };
 
   const handleStatusChange = (newStatus: TaskStatus) => {
+    if (!isOwner && newStatus === 'done') {
+      setPermissionNotice('Only Workspace Owners can move tasks to "Done" status.');
+      setTimeout(() => setPermissionNotice(null), 4000);
+      return;
+    }
+    setPermissionNotice(null);
     onUpdateTask({ ...task, status: newStatus, updatedAt: new Date().toISOString() });
   };
 
@@ -177,6 +192,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   };
 
   const handleAssigneeChange = (assigneeId: string | null) => {
+    if (!isOwner) {
+      setPermissionNotice('Collaborators cannot assign tasks. Only Workspace Owners can assign members.');
+      setTimeout(() => setPermissionNotice(null), 4000);
+      return;
+    }
+    setPermissionNotice(null);
     onUpdateTask({ ...task, assigneeId, updatedAt: new Date().toISOString() });
   };
 
@@ -285,8 +306,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const taskComments = comments.filter((c) => c.taskId === task.id);
   const taskActivities = activities.filter((a) => a.taskId === task.id);
 
-  const assignee = USERS.find((u) => u.id === task.assigneeId);
-  const reporter = USERS.find((u) => u.id === task.reporterId);
+  const userPool = allUsers.length > 0 ? allUsers : [activeUser];
+  const assignee = userPool.find((u) => u.id === task.assigneeId);
+  const reporter = userPool.find((u) => u.id === task.reporterId);
   const currentStatusObj = STATUSES.find((s) => s.id === task.status);
   const currentPriorityObj = PRIORITIES.find((p) => p.id === task.priority);
   const currentTypeObj = TYPES.find((t) => t.id === task.type);
@@ -338,17 +360,23 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </select>
 
               {/* Status Switcher */}
-              <select
-                value={task.status}
-                onChange={(e) => handleStatusChange(e.target.value as TaskStatus)}
-                className={`text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-pointer ${currentStatusObj?.bg} ${currentStatusObj?.color}`}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={task.status}
+                  onChange={(e) => handleStatusChange(e.target.value as TaskStatus)}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-pointer ${currentStatusObj?.bg} ${currentStatusObj?.color}`}
+                >
+                  {STATUSES.map((s) => (
+                    <option
+                      key={s.id}
+                      value={s.id}
+                      disabled={!isOwner && s.id === 'done'}
+                    >
+                      {s.label} {!isOwner && s.id === 'done' ? '🔒 (Owner Only)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Actions: Delete, Close */}
@@ -361,7 +389,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               >
                 <Trash2 className="w-4 h-4" />
               </button>
-
               <button
                 type="button"
                 onClick={onClose}
@@ -371,6 +398,23 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* RBAC Permission Notice Alert */}
+          {permissionNotice && (
+            <div className="mx-6 mt-3 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs font-medium flex items-center justify-between gap-2 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{permissionNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPermissionNotice(null)}
+                className="text-amber-700 hover:text-amber-900 text-xs font-bold px-1"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           {/* Main Grid Content */}
           <div className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 dark:divide-slate-800">
@@ -588,7 +632,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     {/* Comments List */}
                     <div className="space-y-3">
                       {taskComments.map((comment) => {
-                        const author = USERS.find((u) => u.id === comment.authorId);
+                        const author = userPool.find((u) => u.id === comment.authorId);
                         const isOwn = comment.authorId === activeUser.id;
                         const isEditingThis = editingCommentId === comment.id;
 
@@ -704,7 +748,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                           <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase">
                             Mention Teammate
                           </div>
-                          {USERS.filter((u) =>
+                          {userPool.filter((u) =>
                             u.name.toLowerCase().includes(mentionFilter)
                           ).map((u) => (
                             <button
@@ -777,7 +821,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       </div>
                     ) : (
                       taskActivities.map((act) => {
-                        const actor = USERS.find((u) => u.id === act.userId);
+                        const actor = userPool.find((u) => u.id === act.userId);
                         return (
                           <div key={act.id} className="flex items-start gap-2.5 text-xs">
                             <img
@@ -817,9 +861,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             <div className="p-6 space-y-5 bg-slate-50/40 dark:bg-slate-800/20">
               {/* Assignee Card */}
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                  Assignee
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Assignee
+                  </label>
+                  {!isOwner && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                      <Lock className="w-3 h-3" />
+                      <span>Owner Only</span>
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   <img
                     src={
@@ -827,20 +879,32 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
                     }
                     alt={assignee?.name || 'Unassigned'}
-                    className="w-7 h-7 rounded-full object-cover"
+                    className="w-7 h-7 rounded-full object-cover shrink-0"
                   />
-                  <select
-                    value={task.assigneeId || ''}
-                    onChange={(e) => handleAssigneeChange(e.target.value || null)}
-                    className="flex-1 px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
-                  >
-                    <option value="">Unassigned (Triage)</option>
-                    {USERS.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name} ({user.role})
-                      </option>
-                    ))}
-                  </select>
+                  {isOwner ? (
+                    <select
+                      value={task.assigneeId || ''}
+                      onChange={(e) => handleAssigneeChange(e.target.value || null)}
+                      className="flex-1 px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
+                    >
+                      <option value="">Unassigned (Triage)</option>
+                      {userPool.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name} ({user.role})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div
+                      className="flex-1 px-2.5 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium flex items-center justify-between cursor-not-allowed opacity-90"
+                      title="Collaborators cannot reassign tasks. Only Owners can assign team members."
+                    >
+                      <span className="truncate">
+                        {assignee ? `${assignee.name} (${assignee.role})` : 'Unassigned'}
+                      </span>
+                      <Lock className="w-3 h-3 text-slate-400 shrink-0 ml-1" />
+                    </div>
+                  )}
                 </div>
               </div>
 

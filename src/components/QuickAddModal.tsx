@@ -15,15 +15,17 @@ import {
   Maximize2,
   ChevronDown,
   ChevronUp,
+  Lock,
 } from 'lucide-react';
-import { Attachment, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
-import { COMMON_LABELS, PRIORITIES, STATUSES, TYPES, USERS } from '../utils/constants';
+import { Attachment, isOwnerUser, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
+import { COMMON_LABELS, PRIORITIES, STATUSES, TYPES } from '../utils/constants';
 
 interface QuickAddModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTask: (task: Omit<Task, 'id' | 'key' | 'createdAt' | 'updatedAt' | 'order'>) => void;
   activeUser: User;
+  allUsers?: User[];
   initialStatus?: TaskStatus;
 }
 
@@ -32,13 +34,17 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   onClose,
   onAddTask,
   activeUser,
+  allUsers = [],
   initialStatus = 'backlog',
 }) => {
+  const isOwner = isOwnerUser(activeUser);
+  const safeInitialStatus = !isOwner && initialStatus === 'done' ? 'backlog' : initialStatus;
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<TaskType>('task');
   const [priority, setPriority] = useState<TaskPriority>('medium');
-  const [status, setStatus] = useState<TaskStatus>(initialStatus);
+  const [status, setStatus] = useState<TaskStatus>(safeInitialStatus);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [labels, setLabels] = useState<string[]>([]);
   const [newLabelInput, setNewLabelInput] = useState('');
@@ -53,7 +59,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   // Sync initial status when modal opens
   useEffect(() => {
     if (isOpen) {
-      setStatus(initialStatus);
+      setStatus(safeInitialStatus);
       setTimeout(() => {
         titleInputRef.current?.focus();
       }, 50);
@@ -71,7 +77,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
       setShowMoreFields(false);
       setPastedScreenshotNotice(false);
     }
-  }, [isOpen, initialStatus]);
+  }, [isOpen, safeInitialStatus]);
 
   // Global paste handler for screenshot pasting directly into modal
   useEffect(() => {
@@ -290,12 +296,20 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
               </label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as TaskStatus)}
+                onChange={(e) => {
+                  const s = e.target.value as TaskStatus;
+                  if (!isOwner && s === 'done') return;
+                  setStatus(s);
+                }}
                 className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
               >
                 {STATUSES.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
+                  <option
+                    key={s.id}
+                    value={s.id}
+                    disabled={!isOwner && s.id === 'done'}
+                  >
+                    {s.label} {!isOwner && s.id === 'done' ? '🔒 (Owner Only)' : ''}
                   </option>
                 ))}
               </select>
@@ -304,21 +318,39 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
           {/* Assignee */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-              Assignee
-            </label>
-            <select
-              value={assigneeId || ''}
-              onChange={(e) => setAssigneeId(e.target.value || null)}
-              className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-            >
-              <option value="">Unassigned (Triage later)</option>
-              {USERS.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name} — {user.role}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                Assignee
+              </label>
+              {!isOwner && (
+                <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                  <Lock className="w-2.5 h-2.5" />
+                  <span>Owner assigns members</span>
+                </span>
+              )}
+            </div>
+            {isOwner ? (
+              <select
+                value={assigneeId || ''}
+                onChange={(e) => setAssigneeId(e.target.value || null)}
+                className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="">Unassigned (Triage later)</option>
+                {(allUsers.length > 0 ? allUsers : [activeUser]).map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.role})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div
+                className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-500 flex items-center justify-between cursor-not-allowed"
+                title="Collaborators cannot assign tasks. New tasks will be triaged and assigned by an Owner."
+              >
+                <span>Unassigned (Triage by Owner)</span>
+                <Lock className="w-3 h-3 text-slate-400" />
+              </div>
+            )}
           </div>
 
           {/* Screenshot Paste Dropzone / Banner */}

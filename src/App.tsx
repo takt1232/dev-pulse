@@ -9,6 +9,7 @@ import {
   ActivityItem,
   Comment,
   FilterState,
+  isOwnerUser,
   Notification,
   SwimlaneMode,
   Task,
@@ -16,7 +17,9 @@ import {
   TaskStatus,
   TaskType,
   User,
+  UserRole,
   ViewMode,
+  Project,
 } from './types';
 import {
   auth,
@@ -26,6 +29,7 @@ import {
   subscribeToActivities,
   subscribeToNotifications,
   subscribeToUsers,
+  subscribeToProjects,
   createTaskInFirestore,
   updateTaskInFirestore,
   deleteTaskInFirestore,
@@ -39,9 +43,13 @@ import {
   markNotificationReadInFirestore,
   markAllNotificationsReadInFirestore,
   upsertUserProfileInFirestore,
+  updateUserRoleInFirestore,
   logoutUser,
+  createProjectInFirestore,
+  updateProjectInFirestore,
 } from './firebase';
 
+import { AlertCircle } from 'lucide-react';
 import { Header } from './components/Header';
 import { FilterBar } from './components/FilterBar';
 import { KanbanBoard } from './components/KanbanBoard';
@@ -54,12 +62,24 @@ import { BulkActionBar } from './components/BulkActionBar';
 import { NotificationDropdown } from './components/NotificationDropdown';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { AuthModal } from './components/AuthModal';
+import { UserManagementModal } from './components/UserManagementModal';
+import { Sidebar } from './components/Sidebar';
+import { ProjectModal } from './components/ProjectModal';
+import { ProjectMembersModal } from './components/ProjectMembersModal';
 
 export default function App() {
   // App state
   const [users, setUsers] = useState<User[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isProjectMembersModalOpen, setIsProjectMembersModalOpen] = useState(false);
+  const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -127,6 +147,11 @@ export default function App() {
       (err) => console.error('Users sync error', err)
     );
 
+    const unsubProjects = subscribeToProjects(
+      (items) => setProjects(items),
+      (err) => console.error('Projects sync error', err)
+    );
+
     const unsubNotifs = subscribeToNotifications(
       activeUserId,
       (items) => setNotifications(items),
@@ -138,6 +163,7 @@ export default function App() {
       unsubComments();
       unsubActivities();
       unsubUsers();
+      unsubProjects();
       unsubNotifs();
     };
   }, [isAuthenticated, activeUserId]);
@@ -167,9 +193,27 @@ export default function App() {
     );
   }, [activeUserId, users]);
 
-  const handleActiveUserChange = (user: User) => {
-    setActiveUserId(user.id);
-  };
+  const isOwner = isOwnerUser(activeUser);
+
+  // Active Project Logic
+  const activeProject = useMemo(() => {
+    if (!projects.length) return null;
+    if (activeProjectId) {
+      const found = projects.find((p) => p.id === activeProjectId);
+      if (found) return found;
+    }
+    // Default to first project the user is a member of
+    const userProjects = projects.filter(
+      (p) => p.ownerId === activeUser.id || (p.collaboratorIds || []).includes(activeUser.id)
+    );
+    return userProjects[0] || projects[0] || null;
+  }, [projects, activeProjectId, activeUser.id]);
+
+  useEffect(() => {
+    if (activeProject && activeProject.id !== activeProjectId) {
+      setActiveProjectId(activeProject.id);
+    }
+  }, [activeProject, activeProjectId]);
 
   const handleLogin = (user: User) => {
     setActiveUserId(user.id);
@@ -183,6 +227,18 @@ export default function App() {
     setIsAuthenticated(true);
     setIsAuthModalOpen(false);
     upsertUserProfileInFirestore(newUser).catch(console.error);
+  };
+
+  const handleUpdateUserRole = async (targetUserId: string, newRole: UserRole) => {
+    if (!isOwner) return;
+    try {
+      await updateUserRoleInFirestore(targetUserId, newRole);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === targetUserId ? { ...u, role: newRole } : u))
+      );
+    } catch (e) {
+      console.error('Failed to update user role in Firestore', e);
+    }
   };
 
   const handleSignOut = async () => {
@@ -242,13 +298,18 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Add a new task (Generates next DEV-xxx key)
+  // Add a new task (Generates next PROJECTKEY-xxx key)
   const handleAddTask = async (
-    taskData: Omit<Task, 'id' | 'key' | 'createdAt' | 'updatedAt' | 'order'>
+    taskData: Omit<Task, 'id' | 'key' | 'createdAt' | 'updatedAt' | 'order' | 'projectId'>
   ) => {
+    if (!activeProject) return;
+    
     // Determine next ticket number
+    const projectKey = activeProject.key || 'DEV';
+    const regex = new RegExp(`^${projectKey}-(\\d+)$`);
+    
     const maxNum = tasks.reduce((max, t) => {
-      const match = t.key.match(/DEV-(\d+)/);
+      const match = t.key.match(regex);
       if (match) {
         const num = parseInt(match[1], 10);
         return num > max ? num : max;
@@ -256,13 +317,14 @@ export default function App() {
       return max;
     }, 100);
 
-    const nextKey = `DEV-${maxNum + 1}`;
+    const nextKey = `${projectKey}-${maxNum + 1}`;
     const newId = `t-${Date.now()}`;
     const timestamp = new Date().toISOString();
 
     const newTask: Task = {
       ...taskData,
       id: newId,
+      projectId: activeProject.id,
       key: nextKey,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -406,6 +468,9 @@ export default function App() {
   const handleMoveTaskStatus = (taskId: string, targetStatus: TaskStatus) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+    if (!isOwner && targetStatus === 'done') {
+      return;
+    }
     handleUpdateTask({
       ...task,
       status: targetStatus,
@@ -513,6 +578,7 @@ export default function App() {
   };
 
   const handleBulkStatusChange = async (newStatus: TaskStatus) => {
+    if (!isOwner && newStatus === 'done') return;
     const idsToUpdate = [...selectedTaskIds];
     setSelectedTaskIds([]);
     try {
@@ -523,6 +589,7 @@ export default function App() {
   };
 
   const handleBulkAssign = async (newAssigneeId: string | null) => {
+    if (!isOwner) return;
     const idsToUpdate = [...selectedTaskIds];
     setSelectedTaskIds([]);
     try {
@@ -569,9 +636,32 @@ export default function App() {
     }
   };
 
+  // Base Project Tasks (Applies RBAC & Project Scoping)
+  const projectTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      // Must belong to the active project
+      if (activeProject) {
+        if (task.projectId !== activeProject.id) {
+          return false;
+        }
+      }
+
+      // RBAC Visibility Rule
+      if (!isOwner) {
+        const isReporter = task.reporterId === activeUser.id;
+        const isAssignee = task.assigneeId === activeUser.id;
+        if (!isReporter && !isAssignee) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [tasks, activeProject, isOwner, activeUser.id]);
+
   // Filtered Tasks computation
   const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
+    return projectTasks.filter((task) => {
       // Search query
       if (filters.search.trim()) {
         const q = filters.search.toLowerCase();
@@ -613,43 +703,115 @@ export default function App() {
 
       return true;
     });
-  }, [tasks, filters]);
+  }, [projectTasks, filters]);
+
+  const unassignedTasks = useMemo(() => {
+    return tasks.filter((t) => !t.projectId);
+  }, [tasks]);
+
+  const handleMigrateUnassignedTasks = async () => {
+    if (!activeProject || unassignedTasks.length === 0) return;
+    try {
+      const promises = unassignedTasks.map(t => 
+        updateTaskInFirestore(t.id, { projectId: activeProject.id })
+      );
+      await Promise.all(promises);
+    } catch (e) {
+      console.error('Failed to migrate tasks:', e);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased transition-colors">
-      {/* Top Header */}
-      <Header
+    <div className="h-screen flex overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased transition-colors">
+      <Sidebar
+        projects={projects}
+        activeProject={activeProject}
+        onSelectProject={(p) => setActiveProjectId(p.id)}
+        onOpenNewProjectModal={() => {
+          setProjectToEdit(null);
+          setIsProjectModalOpen(true);
+        }}
+        onOpenEditProjectModal={(p) => {
+          setProjectToEdit(p);
+          setIsProjectModalOpen(true);
+        }}
+        onOpenProjectMembersModal={(p) => {
+          setIsProjectMembersModalOpen(true);
+        }}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         activeUser={activeUser}
         allUsers={users}
-        onActiveUserChange={handleActiveUserChange}
+        projectTasksCount={filteredTasks.length}
+        myTasksCount={tasks.filter((t) => t.assigneeId === activeUser.id && t.status !== 'done' && (!activeProject || t.projectId === activeProject.id)).length}
+        isOpen={isSidebarOpen}
+        onCloseMobile={() => setIsSidebarOpen(false)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onSignOut={handleSignOut}
-        notifications={activeUserNotifications}
-        unreadCount={unreadNotifsCount}
-        onOpenNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)}
-        onQuickAdd={() => {
-          setQuickAddInitialStatus('backlog');
-          setIsQuickAddOpen(true);
-        }}
-        searchQuery={filters.search}
-        onSearchChange={(q) => setFilters({ ...filters, search: q })}
-        onResetData={handleSignOut}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
+        onOpenUserManagement={() => setIsUserManagementOpen(true)}
       />
 
-      {/* Notification Dropdown */}
-      <NotificationDropdown
-        isOpen={isNotificationsOpen}
-        onClose={() => setIsNotificationsOpen(false)}
-        notifications={activeUserNotifications}
-        onSelectNotification={handleSelectNotification}
-        onMarkAllRead={handleMarkAllNotificationsRead}
-      />
+      {/* Main Content Area (Header + Main) */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto relative">
+        {/* Top Header */}
+        <Header
+          activeProject={activeProject}
+          viewMode={viewMode}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          activeUser={activeUser}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onSignOut={handleSignOut}
+          notifications={activeUserNotifications}
+          unreadCount={unreadNotifsCount}
+          onOpenNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)}
+          onQuickAdd={() => {
+            setQuickAddInitialStatus('backlog');
+            setIsQuickAddOpen(true);
+          }}
+          searchQuery={filters.search}
+          onSearchChange={(q) => setFilters({ ...filters, search: q })}
+          onOpenShortcuts={() => setIsShortcutsOpen(true)}
+          onOpenUserManagement={() => setIsUserManagementOpen(true)}
+          onOpenProjectMembers={() => {
+            if (activeProject) setIsProjectMembersModalOpen(true);
+          }}
+        />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        {/* Notification Dropdown */}
+        <NotificationDropdown
+          isOpen={isNotificationsOpen}
+          onClose={() => setIsNotificationsOpen(false)}
+          notifications={activeUserNotifications}
+          onSelectNotification={handleSelectNotification}
+          onMarkAllRead={handleMarkAllNotificationsRead}
+        />
+
+        {/* Main Content Pane */}
+        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        {unassignedTasks.length > 0 && activeProject ? (
+          <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 rounded-lg">
+                <AlertCircle className="w-5 h-5" />
+              </span>
+              <div>
+                <h4 className="text-sm font-bold text-amber-900 dark:text-amber-100">Unassigned Tasks Found</h4>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  You have {unassignedTasks.length} legacy task(s) that do not belong to any project.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleMigrateUnassignedTasks}
+              className="px-4 py-2 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+            >
+              Move All to Current Project
+            </button>
+          </div>
+        ) : null}
+        
         {/* Filters and Controls (hidden on Analytics view) */}
         {viewMode !== 'analytics' && (
           <FilterBar
@@ -660,6 +822,7 @@ export default function App() {
             viewMode={viewMode}
             totalTasksCount={tasks.length}
             filteredTasksCount={filteredTasks.length}
+            allUsers={users}
           />
         )}
 
@@ -678,6 +841,8 @@ export default function App() {
               }}
               selectedTaskIds={selectedTaskIds}
               onToggleSelectTask={handleToggleSelectTask}
+              allUsers={users}
+              activeUser={activeUser}
             />
           )}
 
@@ -692,6 +857,8 @@ export default function App() {
               onToggleSelectTask={handleToggleSelectTask}
               onSelectAll={setSelectedTaskIds}
               onClearSelection={() => setSelectedTaskIds([])}
+              allUsers={users}
+              activeUser={activeUser}
             />
           )}
 
@@ -706,20 +873,63 @@ export default function App() {
                 setQuickAddInitialStatus('todo');
                 setIsQuickAddOpen(true);
               }}
+              allUsers={users}
             />
           )}
 
-          {viewMode === 'analytics' && <AnalyticsView tasks={tasks} />}
+          {viewMode === 'analytics' && <AnalyticsView tasks={projectTasks} allUsers={users} />}
         </div>
       </main>
+      </div>
 
       {/* Modals & Floating Overlays */}
+      <ProjectModal
+        isOpen={isProjectModalOpen}
+        onClose={() => setIsProjectModalOpen(false)}
+        projectToEdit={projectToEdit}
+        currentUser={activeUser}
+        onSubmit={async (data) => {
+          if (projectToEdit) {
+            await updateProjectInFirestore(projectToEdit.id, data);
+          } else {
+            const newProject: Project = {
+              id: `proj-${Date.now()}`,
+              name: data.name,
+              key: data.key,
+              description: data.description,
+              color: data.color,
+              icon: data.icon,
+              ownerId: activeUser.id,
+              collaboratorIds: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            await createProjectInFirestore(newProject);
+            setActiveProjectId(newProject.id);
+          }
+        }}
+      />
+
+      {activeProject && (
+        <ProjectMembersModal
+          isOpen={isProjectMembersModalOpen}
+          onClose={() => setIsProjectMembersModalOpen(false)}
+          project={activeProject}
+          allUsers={users}
+          currentUser={activeUser}
+          onUpdateCollaborators={async (pid, cids) => {
+            await updateProjectInFirestore(pid, { collaboratorIds: cids });
+          }}
+        />
+      )}
+
       <QuickAddModal
         isOpen={isQuickAddOpen}
         onClose={() => setIsQuickAddOpen(false)}
         onAddTask={handleAddTask}
         activeUser={activeUser}
         initialStatus={quickAddInitialStatus}
+        allUsers={users}
       />
 
       <TaskDetailModal
@@ -735,6 +945,7 @@ export default function App() {
         onConvertCommentToTask={handleConvertCommentToTask}
         activities={activities}
         activeUser={activeUser}
+        allUsers={users}
       />
 
       <ShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
@@ -747,6 +958,8 @@ export default function App() {
         onBulkAssign={handleBulkAssign}
         onBulkPriorityChange={handleBulkPriorityChange}
         onBulkDelete={handleBulkDelete}
+        allUsers={users}
+        activeUser={activeUser}
       />
 
       {/* Authentication Modal */}
@@ -757,6 +970,16 @@ export default function App() {
         onLogin={handleLogin}
         onRegister={handleRegister}
         allUsers={users}
+      />
+
+      {/* User & Role Management Modal (Owner Only) */}
+      <UserManagementModal
+        isOpen={isUserManagementOpen}
+        onClose={() => setIsUserManagementOpen(false)}
+        activeUser={activeUser}
+        allUsers={users}
+        tasks={tasks}
+        onUpdateUserRole={handleUpdateUserRole}
       />
     </div>
   );

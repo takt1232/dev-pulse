@@ -12,8 +12,8 @@ import {
   Clock,
   MoreVertical,
 } from 'lucide-react';
-import { Comment, Task } from '../types';
-import { PRIORITIES, TYPES, USERS } from '../utils/constants';
+import { Comment, Task, User } from '../types';
+import { PRIORITIES, TYPES } from '../utils/constants';
 
 interface TaskCardProps {
   task: Task;
@@ -22,6 +22,7 @@ interface TaskCardProps {
   isSelected?: boolean;
   onToggleSelect?: (taskId: string, e: React.MouseEvent) => void;
   onDragStart?: (e: React.DragEvent, task: Task) => void;
+  allUsers?: User[];
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({
@@ -31,8 +32,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   isSelected = false,
   onToggleSelect,
   onDragStart,
+  allUsers = [],
 }) => {
-  const assignee = USERS.find((u) => u.id === task.assigneeId);
+  const assignee = allUsers.find((u) => u.id === task.assigneeId);
   const typeObj = TYPES.find((t) => t.id === task.type);
   const priorityObj = PRIORITIES.find((p) => p.id === task.priority);
 

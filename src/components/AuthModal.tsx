@@ -31,14 +31,17 @@ const AVATAR_OPTIONS = [
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
 ];
 
-const ROLES = [
-  'Lead Full-Stack Developer',
-  'Senior Frontend Engineer',
-  'Senior Backend Engineer',
-  'Product Manager',
-  'DevOps & Security',
-  'QA Automation Engineer',
-  'UI/UX Designer',
+const ACCESS_ROLES: { role: 'Collaborator' | 'Owner'; title: string; desc: string }[] = [
+  {
+    role: 'Collaborator',
+    title: 'Collaborator (Standard Team Member)',
+    desc: 'Can see tasks created by or assigned to you. Cannot reassign or mark Done.',
+  },
+  {
+    role: 'Owner',
+    title: 'Owner (Workspace Admin)',
+    desc: 'Full access to all tasks, assignment permissions, status approvals, and team management.',
+  },
 ];
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -60,13 +63,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState(ROLES[0]);
+  const [newRole, setNewRole] = useState<'Collaborator' | 'Owner'>('Collaborator');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_OPTIONS[0]);
 
   if (!isOpen) return null;
 
   const formatFirebaseError = (error: any): string => {
     const code = error?.code || '';
+    if (code === 'auth/unauthorized-domain') {
+      return 'This domain is not authorized in Firebase Console yet. You can sign in using Email & Password directly, or add this domain under Firebase Authentication > Settings > Authorized domains.';
+    }
     if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
       return 'Invalid email or password. Please check your credentials or create an account.';
     }
@@ -394,20 +400,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                <span>Team Role</span>
+                <span>Workspace Access Role</span>
               </label>
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                disabled={isLoading}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50"
-              >
-                {ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
+              <div className="grid grid-cols-1 gap-2">
+                {ACCESS_ROLES.map((r) => (
+                  <label
+                    key={r.role}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                      newRole === r.role
+                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-1 ring-indigo-600'
+                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="role"
+                      value={r.role}
+                      checked={newRole === r.role}
+                      onChange={() => setNewRole(r.role)}
+                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900 dark:text-white">
+                        {r.title}
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                        {r.desc}
+                      </div>
+                    </div>
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
 
             {/* Avatar Picker */}

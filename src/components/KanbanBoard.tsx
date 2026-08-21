@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Plus, MoreHorizontal, CheckCircle2, ChevronRight, ChevronDown } from 'lucide-react';
-import { Comment, SwimlaneMode, Task, TaskStatus, User } from '../types';
-import { STATUSES, TYPES, USERS } from '../utils/constants';
+import { Plus, MoreHorizontal, CheckCircle2, ChevronRight, ChevronDown, Lock, AlertCircle } from 'lucide-react';
+import { Comment, isOwnerUser, SwimlaneMode, Task, TaskStatus, User } from '../types';
+import { STATUSES, TYPES } from '../utils/constants';
 import { TaskCard } from './TaskCard';
 
 interface KanbanBoardProps {
@@ -14,21 +14,30 @@ interface KanbanBoardProps {
   onQuickAddWithStatus: (status: TaskStatus) => void;
   selectedTaskIds: string[];
   onToggleSelectTask: (taskId: string, e: React.MouseEvent) => void;
+  allUsers?: User[];
+  activeUser: User;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
-  tasks,
-  comments,
+  tasks = [],
+  comments = [],
   swimlaneMode,
   onSelectTask,
   onMoveTaskStatus,
   onQuickAddWithStatus,
-  selectedTaskIds,
+  selectedTaskIds = [],
   onToggleSelectTask,
+  allUsers = [],
+  activeUser,
 }) => {
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
+  const safeComments = Array.isArray(comments) ? comments : [];
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [collapsedSwimlanes, setCollapsedSwimlanes] = useState<Record<string, boolean>>({});
+  const [rbacWarning, setRbacWarning] = useState<string | null>(null);
+
+  const isOwner = isOwnerUser(activeUser);
 
   const handleDragStart = (e: React.DragEvent, task: Task) => {
     e.dataTransfer.setData('text/plain', task.id);
@@ -51,6 +60,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     setDraggedTaskId(null);
 
     if (taskId) {
+      if (!isOwner && targetStatus === 'done') {
+        setRbacWarning('Collaborators cannot move tasks to "Done". Owner approval required.');
+        setTimeout(() => setRbacWarning(null), 4000);
+        return;
+      }
+
       const task = tasks.find((t) => t.id === taskId);
       if (task && task.status !== targetStatus) {
         onMoveTaskStatus(taskId, targetStatus);
@@ -79,44 +94,69 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   // Render Standard Board (No Swimlanes)
   if (swimlaneMode === 'none') {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-start pb-12">
-        {STATUSES.map((status) => {
-          const colTasks = tasks.filter((t) => t.status === status.id);
-          const isOver = dragOverColumn === status.id;
-
-          return (
-            <div
-              key={status.id}
-              onDragOver={(e) => handleDragOver(e, status.id)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, status.id)}
-              className={`flex flex-col rounded-2xl bg-slate-100/70 dark:bg-slate-800/40 border transition-all ${
-                isOver
-                  ? 'border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-2 ring-indigo-500/20'
-                  : 'border-slate-200/70 dark:border-slate-800'
-              }`}
+      <div className="space-y-4 pb-12">
+        {rbacWarning && (
+          <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center justify-between gap-2 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{rbacWarning}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRbacWarning(null)}
+              className="text-amber-700 hover:text-amber-900 text-xs font-bold px-1"
             >
-              {/* Column Header */}
-              <div className="flex items-center justify-between p-3.5 border-b border-slate-200/50 dark:border-slate-800">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${status.dot}`} />
-                  <h2 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                    {status.label}
-                  </h2>
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-2xs">
-                    {colTasks.length}
-                  </span>
-                </div>
+              ×
+            </button>
+          </div>
+        )}
 
-                <button
-                  type="button"
-                  onClick={() => onQuickAddWithStatus(status.id)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                  title={`Add task to ${status.label}`}
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-start">
+          {STATUSES.map((status) => {
+            const colTasks = tasks.filter((t) => t.status === status.id);
+            const isOver = dragOverColumn === status.id;
+            const isDoneCol = status.id === 'done';
+
+            return (
+              <div
+                key={status.id}
+                onDragOver={(e) => handleDragOver(e, status.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, status.id)}
+                className={`flex flex-col rounded-2xl bg-slate-100/70 dark:bg-slate-800/40 border transition-all ${
+                  isOver
+                    ? 'border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-2 ring-indigo-500/20'
+                    : 'border-slate-200/70 dark:border-slate-800'
+                }`}
+              >
+                {/* Column Header */}
+                <div className="flex items-center justify-between p-3.5 border-b border-slate-200/50 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                    <div className={`w-2.5 h-2.5 rounded-full ${status.dot}`} />
+                    <h2 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                      {status.label}
+                    </h2>
+                    {isDoneCol && !isOwner && (
+                      <span className="p-0.5 rounded text-slate-400 dark:text-slate-500" title="Only Owners can move tasks to Done">
+                        <Lock className="w-3 h-3 text-amber-500" />
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-2xs ml-auto sm:ml-0">
+                      {colTasks.length}
+                    </span>
+                  </div>
+
+                  {(!isDoneCol || isOwner) && (
+                    <button
+                      type="button"
+                      onClick={() => onQuickAddWithStatus(status.id)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                      title={`Add task to ${status.label}`}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
 
               {/* Cards Container */}
               <div className="p-2.5 space-y-2.5 min-h-[450px]">
@@ -141,6 +181,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       isSelected={selectedTaskIds.includes(task.id)}
                       onToggleSelect={onToggleSelectTask}
                       onDragStart={handleDragStart}
+                      allUsers={allUsers}
                     />
                   ))
                 )}
@@ -148,6 +189,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
           );
         })}
+        </div>
       </div>
     );
   }
@@ -157,7 +199,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   if (swimlaneMode === 'assignee') {
     swimlaneGroups = [
-      ...USERS.map((user) => ({
+      ...allUsers.map((user) => ({
         key: user.id,
         title: user.name,
         avatar: user.avatar,
@@ -197,6 +239,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   return (
     <div className="space-y-6 pb-12">
+      {rbacWarning && (
+        <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center justify-between gap-2 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{rbacWarning}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRbacWarning(null)}
+            className="text-amber-700 hover:text-amber-900 text-xs font-bold px-1"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Column Headers Sticky Bar */}
       <div className="hidden lg:grid lg:grid-cols-5 gap-4 px-2">
         {STATUSES.map((status) => (
@@ -205,6 +263,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
               {status.label}
             </span>
+            {status.id === 'done' && !isOwner && (
+              <Lock className="w-3 h-3 text-amber-500" title="Only Owners can move tasks to Done" />
+            )}
           </div>
         ))}
       </div>
@@ -284,6 +345,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             isSelected={selectedTaskIds.includes(task.id)}
                             onToggleSelect={onToggleSelectTask}
                             onDragStart={handleDragStart}
+                            allUsers={allUsers}
                           />
                         ))}
                       </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { CheckSquare, X, Users, ArrowRight, Flag, Trash2, CheckCircle2 } from 'lucide-react';
-import { TaskPriority, TaskStatus, User } from '../types';
-import { PRIORITIES, STATUSES, USERS } from '../utils/constants';
+import { CheckSquare, X, Users, ArrowRight, Flag, Trash2, CheckCircle2, Lock } from 'lucide-react';
+import { isOwnerUser, TaskPriority, TaskStatus, User } from '../types';
+import { PRIORITIES, STATUSES } from '../utils/constants';
 
 interface BulkActionBarProps {
   selectedCount: number;
@@ -10,6 +10,8 @@ interface BulkActionBarProps {
   onBulkAssign: (assigneeId: string | null) => void;
   onBulkPriorityChange: (priority: TaskPriority) => void;
   onBulkDelete: () => void;
+  allUsers?: User[];
+  activeUser: User;
 }
 
 export const BulkActionBar: React.FC<BulkActionBarProps> = ({
@@ -19,8 +21,11 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onBulkAssign,
   onBulkPriorityChange,
   onBulkDelete,
+  allUsers = [],
+  activeUser,
 }) => {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const isOwner = isOwnerUser(activeUser);
 
   if (selectedCount === 0) return null;
 
@@ -77,7 +82,9 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
               <select
                 onChange={(e) => {
                   if (e.target.value) {
-                    onBulkStatusChange(e.target.value as TaskStatus);
+                    const s = e.target.value as TaskStatus;
+                    if (!isOwner && s === 'done') return;
+                    onBulkStatusChange(s);
                     e.target.value = '';
                   }
                 }}
@@ -88,33 +95,39 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                   Set Status...
                 </option>
                 {STATUSES.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    → {s.label}
+                  <option
+                    key={s.id}
+                    value={s.id}
+                    disabled={!isOwner && s.id === 'done'}
+                  >
+                    → {s.label} {!isOwner && s.id === 'done' ? '🔒' : ''}
                   </option>
                 ))}
               </select>
 
-              {/* Assignee Change */}
-              <select
-                onChange={(e) => {
-                  if (e.target.value !== '') {
-                    onBulkAssign(e.target.value === 'none' ? null : e.target.value);
-                    e.target.value = '';
-                  }
-                }}
-                defaultValue=""
-                className="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium cursor-pointer hover:bg-slate-700 focus:outline-none"
-              >
-                <option value="" disabled>
-                  Assign To...
-                </option>
-                <option value="none">Unassigned</option>
-                {USERS.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
+              {/* Assignee Change - Only for Owners */}
+              {isOwner ? (
+                <select
+                  onChange={(e) => {
+                    if (e.target.value !== '') {
+                      onBulkAssign(e.target.value === 'none' ? null : e.target.value);
+                      e.target.value = '';
+                    }
+                  }}
+                  defaultValue=""
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium cursor-pointer hover:bg-slate-700 focus:outline-none"
+                >
+                  <option value="" disabled>
+                    Assign To...
                   </option>
-                ))}
-              </select>
+                  <option value="none">Unassigned</option>
+                  {allUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
 
               {/* Priority Change */}
               <select

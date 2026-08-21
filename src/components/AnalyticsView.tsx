@@ -10,46 +10,50 @@ import {
   Clock,
   PieChart,
 } from 'lucide-react';
-import { Task, TaskPriority, TaskStatus, TaskType } from '../types';
-import { PRIORITIES, STATUSES, TYPES, USERS } from '../utils/constants';
+import { Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
+import { PRIORITIES, STATUSES, TYPES } from '../utils/constants';
 
 interface AnalyticsViewProps {
   tasks: Task[];
+  allUsers?: User[];
 }
 
-export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ tasks }) => {
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t) => t.status === 'done').length;
-  const inProgressTasks = tasks.filter((t) => t.status === 'in_progress').length;
-  const bugTasks = tasks.filter((t) => t.type === 'bug');
-  const featureTasks = tasks.filter((t) => t.type === 'feature');
-  const urgentTasks = tasks.filter((t) => t.priority === 'urgent');
+export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ tasks = [], allUsers = [] }) => {
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
+  const safeUsers = Array.isArray(allUsers) ? allUsers : [];
+
+  const totalTasks = safeTasks.length;
+  const completedTasks = safeTasks.filter((t) => t.status === 'done').length;
+  const inProgressTasks = safeTasks.filter((t) => t.status === 'in_progress').length;
+  const bugTasks = safeTasks.filter((t) => t.type === 'bug');
+  const featureTasks = safeTasks.filter((t) => t.type === 'feature');
+  const urgentTasks = safeTasks.filter((t) => t.priority === 'urgent');
 
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   // Type Distribution counts
   const typeCounts: Record<TaskType, number> = {
-    bug: tasks.filter((t) => t.type === 'bug').length,
-    feature: tasks.filter((t) => t.type === 'feature').length,
-    task: tasks.filter((t) => t.type === 'task').length,
-    improvement: tasks.filter((t) => t.type === 'improvement').length,
+    bug: safeTasks.filter((t) => t.type === 'bug').length,
+    feature: safeTasks.filter((t) => t.type === 'feature').length,
+    task: safeTasks.filter((t) => t.type === 'task').length,
+    improvement: safeTasks.filter((t) => t.type === 'improvement').length,
   };
 
   // Status Distribution
   const statusCounts: Record<TaskStatus, number> = {
-    backlog: tasks.filter((t) => t.status === 'backlog').length,
-    todo: tasks.filter((t) => t.status === 'todo').length,
-    in_progress: tasks.filter((t) => t.status === 'in_progress').length,
-    in_review: tasks.filter((t) => t.status === 'in_review').length,
-    done: tasks.filter((t) => t.status === 'done').length,
+    backlog: safeTasks.filter((t) => t.status === 'backlog').length,
+    todo: safeTasks.filter((t) => t.status === 'todo').length,
+    in_progress: safeTasks.filter((t) => t.status === 'in_progress').length,
+    in_review: safeTasks.filter((t) => t.status === 'in_review').length,
+    done: safeTasks.filter((t) => t.status === 'done').length,
   };
 
   // Priority Distribution
   const priorityCounts: Record<TaskPriority, number> = {
-    urgent: tasks.filter((t) => t.priority === 'urgent').length,
-    high: tasks.filter((t) => t.priority === 'high').length,
-    medium: tasks.filter((t) => t.priority === 'medium').length,
-    low: tasks.filter((t) => t.priority === 'low').length,
+    urgent: safeTasks.filter((t) => t.priority === 'urgent').length,
+    high: safeTasks.filter((t) => t.priority === 'high').length,
+    medium: safeTasks.filter((t) => t.priority === 'medium').length,
+    low: safeTasks.filter((t) => t.priority === 'low').length,
   };
 
   return (
@@ -222,40 +226,46 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ tasks }) => {
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-          {USERS.map((user) => {
-            const userTasks = tasks.filter((t) => t.assigneeId === user.id);
-            const userActive = userTasks.filter((t) => t.status !== 'done').length;
-            const userDone = userTasks.filter((t) => t.status === 'done').length;
+          {allUsers.length === 0 ? (
+            <div className="col-span-full py-6 text-center text-xs text-slate-400">
+              No registered team members yet.
+            </div>
+          ) : (
+            allUsers.map((user) => {
+              const userTasks = tasks.filter((t) => t.assigneeId === user.id);
+              const userActive = userTasks.filter((t) => t.status !== 'done').length;
+              const userDone = userTasks.filter((t) => t.status === 'done').length;
 
-            return (
-              <div
-                key={user.id}
-                className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-3.5"
-              >
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-10 h-10 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-700 shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                    {user.name}
-                  </h3>
-                  <p className="text-[10px] text-slate-400 truncate">{user.role}</p>
+              return (
+                <div
+                  key={user.id}
+                  className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-3.5"
+                >
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-700 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {user.name}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 truncate">{user.role}</p>
 
-                  <div className="flex items-center gap-3 mt-2 text-[11px]">
-                    <span className="text-blue-600 dark:text-blue-400 font-semibold">
-                      {userActive} active
-                    </span>
-                    <span className="text-slate-300 dark:text-slate-600">•</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                      {userDone} done
-                    </span>
+                    <div className="flex items-center gap-3 mt-2 text-[11px]">
+                      <span className="text-blue-600 dark:text-blue-400 font-semibold">
+                        {userActive} active
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-600">•</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        {userDone} done
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
     </div>

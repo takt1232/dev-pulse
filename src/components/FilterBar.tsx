@@ -10,8 +10,8 @@ import {
   AlertCircle,
   Sparkles,
 } from 'lucide-react';
-import { FilterState, SwimlaneMode, TaskPriority, TaskStatus, TaskType, ViewMode } from '../types';
-import { COMMON_LABELS, PRIORITIES, STATUSES, TYPES, USERS } from '../utils/constants';
+import { FilterState, SwimlaneMode, TaskPriority, TaskStatus, TaskType, User as UserType, ViewMode } from '../types';
+import { COMMON_LABELS, PRIORITIES, STATUSES, TYPES } from '../utils/constants';
 
 interface FilterBarProps {
   filters: FilterState;
@@ -21,6 +21,7 @@ interface FilterBarProps {
   viewMode: ViewMode;
   totalTasksCount: number;
   filteredTasksCount: number;
+  allUsers?: UserType[];
 }
 
 export const FilterBar: React.FC<FilterBarProps> = ({
@@ -31,6 +32,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   viewMode,
   totalTasksCount,
   filteredTasksCount,
+  allUsers = [],
 }) => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -224,7 +226,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 <span className="text-slate-800 dark:text-slate-200">Unassigned</span>
               </label>
 
-              {USERS.map((u) => {
+              {allUsers.map((u) => {
                 const checked = filters.assignees.includes(u.id);
                 return (
                   <label

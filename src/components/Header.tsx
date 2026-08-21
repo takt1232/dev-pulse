@@ -1,9 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  LayoutGrid,
-  ListFilter,
-  UserCheck,
-  BarChart3,
+  Menu,
   Plus,
   Bell,
   Search,
@@ -17,15 +14,18 @@ import {
   LogOut,
   UserPlus,
   Shield,
+  Users,
+  Crown,
+  Filter,
+  Layers,
 } from 'lucide-react';
-import { Notification, User, ViewMode } from '../types';
+import { Project, User, ViewMode, isProjectOwner, isOwnerUser, Notification } from '../types';
 
 interface HeaderProps {
+  activeProject: Project | null;
   viewMode: ViewMode;
-  onViewModeChange: (mode: ViewMode) => void;
+  onToggleSidebar: () => void;
   activeUser: User;
-  allUsers: User[];
-  onActiveUserChange: (user: User) => void;
   onOpenAuthModal: () => void;
   onSignOut: () => void;
   notifications: Notification[];
@@ -34,16 +34,16 @@ interface HeaderProps {
   onQuickAdd: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  onResetData: () => void;
   onOpenShortcuts: () => void;
+  onOpenUserManagement?: () => void;
+  onOpenProjectMembers?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  activeProject,
   viewMode,
-  onViewModeChange,
+  onToggleSidebar,
   activeUser,
-  allUsers,
-  onActiveUserChange,
   onOpenAuthModal,
   onSignOut,
   unreadCount,
@@ -51,11 +51,14 @@ export const Header: React.FC<HeaderProps> = ({
   onQuickAdd,
   searchQuery,
   onSearchChange,
-  onResetData,
   onOpenShortcuts,
+  onOpenUserManagement,
+  onOpenProjectMembers,
 }) => {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const isGlobalOwner = isOwnerUser(activeUser);
+  const isProjOwner = isProjectOwner(activeProject, activeUser.id);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -67,98 +70,70 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const viewLabels: Record<ViewMode, string> = {
+    board: 'Kanban Board',
+    list: 'List View',
+    my_tasks: 'My Tasks',
+    analytics: 'Insights & Analytics',
+  };
+
   return (
-    <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-4">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white shadow-sm shadow-indigo-500/20">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div className="leading-tight">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-900 dark:text-white tracking-tight text-base sm:text-lg">
-                    DevPulse
+    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
+      <div className="px-4 sm:px-6">
+        <div className="flex items-center justify-between h-16 gap-3 sm:gap-4">
+          {/* Left: Sidebar Toggle + Project Breadcrumb */}
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              id="sidebar-toggle-btn"
+              onClick={onToggleSidebar}
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              title="Toggle Project Navigation Sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {activeProject ? (
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-sm shrink-0"
+                  style={{
+                    backgroundColor: `${activeProject.color || '#4F46E5'}20`,
+                    color: activeProject.color || '#4F46E5',
+                  }}
+                >
+                  {activeProject.icon || '🚀'}
+                </div>
+                <div className="min-w-0 flex items-center gap-1.5">
+                  <span className="font-bold text-slate-900 dark:text-white text-sm truncate max-w-[140px] sm:max-w-[200px]">
+                    {activeProject.name}
                   </span>
-                  <span className="hidden sm:inline-flex px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 rounded border border-indigo-200 dark:border-indigo-800">
-                    Team Tracker
+                  <span className="hidden sm:inline-flex px-1.5 py-0.2 text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 rounded border border-slate-200 dark:border-slate-700">
+                    {activeProject.key}
+                  </span>
+                  <span className="text-slate-300 dark:text-slate-600 text-xs hidden md:inline">/</span>
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 hidden md:inline truncate">
+                    {viewLabels[viewMode]}
                   </span>
                 </div>
               </div>
-            </div>
-
-            {/* View Mode Navigation Tabs */}
-            <nav className="hidden md:flex items-center bg-slate-100 dark:bg-slate-800/70 p-1 rounded-lg border border-slate-200/80 dark:border-slate-700/80 text-xs font-medium">
-              <button
-                type="button"
-                id="view-tab-board"
-                onClick={() => onViewModeChange('board')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
-                  viewMode === 'board'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-semibold shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Kanban Board</span>
-              </button>
-
-              <button
-                type="button"
-                id="view-tab-list"
-                onClick={() => onViewModeChange('list')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
-                  viewMode === 'list'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-semibold shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <ListFilter className="w-3.5 h-3.5" />
-                <span>List View</span>
-              </button>
-
-              <button
-                type="button"
-                id="view-tab-my-tasks"
-                onClick={() => onViewModeChange('my_tasks')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
-                  viewMode === 'my_tasks'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-semibold shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>My Tasks</span>
-              </button>
-
-              <button
-                type="button"
-                id="view-tab-analytics"
-                onClick={() => onViewModeChange('analytics')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
-                  viewMode === 'analytics'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-semibold shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <BarChart3 className="w-3.5 h-3.5" />
-                <span>Insights</span>
-              </button>
-            </nav>
+            ) : (
+              <span className="font-bold text-slate-900 dark:text-white text-sm">
+                DevPulse
+              </span>
+            )}
           </div>
 
           {/* Center Search Input */}
-          <div className="hidden lg:flex items-center flex-1 max-w-md mx-2">
+          <div className="flex-1 max-w-md mx-2">
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search tasks, bugs, tags (or press /)..."
-                className="w-full pl-9 pr-8 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all"
+                placeholder="Search tasks, bugs, tags (press /)..."
+                className="w-full pl-9 pr-8 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all"
               />
               {searchQuery && (
                 <button
@@ -173,17 +148,20 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Right Action Tools */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Keyboard Shortcuts button */}
-            <button
-              type="button"
-              id="shortcuts-btn"
-              onClick={onOpenShortcuts}
-              title="Keyboard Shortcuts (Press ?)"
-              className="hidden sm:flex items-center justify-center p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <HelpCircle className="w-4 h-4" />
-            </button>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {/* Invite members to active project */}
+            {activeProject && onOpenProjectMembers && isProjOwner && (
+              <button
+                type="button"
+                id="header-invite-btn"
+                onClick={onOpenProjectMembers}
+                title="Invite collaborators to this project"
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition-all"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Invite</span>
+              </button>
+            )}
 
             {/* Notification Bell */}
             <div className="relative">
@@ -191,7 +169,7 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 id="notifications-bell-btn"
                 onClick={onOpenNotifications}
-                className="relative p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="relative p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
@@ -208,13 +186,18 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               id="global-new-task-btn"
               onClick={onQuickAdd}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs sm:text-sm font-semibold shadow-xs shadow-indigo-600/20 transition-all cursor-pointer select-none"
+              disabled={!activeProject}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-semibold shadow-xs shadow-indigo-600/20 transition-all cursor-pointer select-none"
+              title={!activeProject ? "Create a project first" : "Create new task"}
             >
               <Plus className="w-4 h-4" />
-              <span>New Task</span>
-              <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.2 bg-indigo-700 text-indigo-100 rounded text-[10px] font-mono border border-indigo-500/40">
-                C
-              </kbd>
+              <span className="hidden sm:inline">New Task</span>
+              <span className="sm:hidden">New</span>
+              {activeProject && (
+                <span className="hidden md:inline text-[10px] font-mono opacity-80">
+                  [{activeProject.key}]
+                </span>
+              )}
             </button>
 
             {/* Active User Switcher Dropdown */}
@@ -223,36 +206,52 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 id="active-user-menu-btn"
                 onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 transition-colors"
+                className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 transition-colors"
               >
-                <img
-                  src={activeUser.avatar}
-                  alt={activeUser.name}
-                  className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700"
-                />
-                <div className="hidden xl:block text-left text-xs">
-                  <div className="font-semibold text-slate-800 dark:text-slate-200 leading-tight">
-                    {activeUser.name}
-                  </div>
-                  <div className="text-[10px] text-slate-400 leading-tight">{activeUser.role}</div>
+                <div className="relative">
+                  <img
+                    src={activeUser.avatar}
+                    alt={activeUser.name}
+                    className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700"
+                  />
+                  {isProjOwner && (
+                    <div
+                      className="absolute -top-1 -right-1 p-0.5 rounded-full bg-amber-500 text-white ring-1 ring-white dark:ring-slate-900"
+                      title="Project Owner"
+                    >
+                      <Crown className="w-2 h-2" />
+                    </div>
+                  )}
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 mr-0.5" />
               </button>
 
               {userDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                   {/* Current Active Account Header */}
-                  <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-700/60 mb-1 bg-slate-50/70 dark:bg-slate-800/80 rounded-t-xl">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Signed in as
-                    </span>
-                    <div className="flex items-center gap-2.5 mt-1">
+                  <div className="px-3.5 py-3 border-b border-slate-100 dark:border-slate-700/60 mb-1 bg-slate-50/70 dark:bg-slate-800/80 rounded-t-xl">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Active Profile
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                          isProjOwner
+                            ? 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                            : 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                        }`}
+                      >
+                        {isProjOwner ? <Crown className="w-3 h-3 text-amber-500" /> : <Users className="w-3 h-3 text-indigo-500" />}
+                        <span>{isProjOwner ? 'Project Owner' : 'Collaborator'}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5 mt-2">
                       <img
                         src={activeUser.avatar}
                         alt={activeUser.name}
-                        className="w-8 h-8 rounded-full object-cover ring-1 ring-indigo-500"
+                        className="w-9 h-9 rounded-full object-cover ring-2 ring-indigo-500/40 shrink-0"
                       />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
                           {activeUser.name}
                         </div>
@@ -263,58 +262,32 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                   </div>
 
-                  {allUsers.length > 1 && (
-                    <>
-                      <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                        Switch Workspace Member
-                      </div>
+                  {/* Actions */}
+                  <div className="mt-1 pt-1 px-2 space-y-1">
+                    {onOpenUserManagement && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserDropdownOpen(false);
+                          onOpenUserManagement();
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors font-medium text-left"
+                      >
+                        <Shield className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <span>Workspace Team Directory</span>
+                      </button>
+                    )}
 
-                      <div className="max-h-48 overflow-y-auto py-1">
-                        {allUsers.map((user) => {
-                          const isCurrent = user.id === activeUser.id;
-                          return (
-                            <button
-                              key={user.id}
-                              type="button"
-                              onClick={() => {
-                                onActiveUserChange(user);
-                                setUserDropdownOpen(false);
-                              }}
-                              className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors ${
-                                isCurrent
-                                  ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold'
-                                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                              }`}
-                            >
-                              <img
-                                src={user.avatar}
-                                alt={user.name}
-                                className="w-6 h-6 rounded-full object-cover"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="truncate text-xs">{user.name}</div>
-                                <div className="text-[10px] text-slate-400 truncate">{user.role}</div>
-                              </div>
-                              {isCurrent && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-
-                  {/* Auth Actions */}
-                  <div className="border-t border-slate-100 dark:border-slate-700/60 mt-1 pt-1.5 px-2 space-y-1">
                     <button
                       type="button"
                       onClick={() => {
                         setUserDropdownOpen(false);
                         onOpenAuthModal();
                       }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors font-medium"
+                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors font-medium text-left"
                     >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>Switch / Join with New Account</span>
+                      <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                      <span>Switch / Sign In Another Account</span>
                     </button>
 
                     <button
@@ -323,80 +296,16 @@ export const Header: React.FC<HeaderProps> = ({
                         setUserDropdownOpen(false);
                         onSignOut();
                       }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors font-medium"
+                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors font-medium text-left"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
+                      <LogOut className="w-3.5 h-3.5 shrink-0" />
                       <span>Sign Out</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUserDropdownOpen(false);
-                        onResetData();
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/40 transition-colors"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Clear Workspace Data</span>
                     </button>
                   </div>
                 </div>
               )}
             </div>
           </div>
-        </div>
-
-        {/* Mobile View Switcher Tab Bar */}
-        <div className="flex md:hidden items-center justify-between py-2 border-t border-slate-100 dark:border-slate-800 gap-1 text-xs">
-          <button
-            type="button"
-            onClick={() => onViewModeChange('board')}
-            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded ${
-              viewMode === 'board'
-                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 font-semibold'
-                : 'text-slate-600'
-            }`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span>Board</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onViewModeChange('list')}
-            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded ${
-              viewMode === 'list'
-                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 font-semibold'
-                : 'text-slate-600'
-            }`}
-          >
-            <ListFilter className="w-3.5 h-3.5" />
-            <span>List</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onViewModeChange('my_tasks')}
-            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded ${
-              viewMode === 'my_tasks'
-                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 font-semibold'
-                : 'text-slate-600'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            <span>My Tasks</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onViewModeChange('analytics')}
-            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded ${
-              viewMode === 'analytics'
-                ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 font-semibold'
-                : 'text-slate-600'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Insights</span>
-          </button>
         </div>
       </div>
     </header>

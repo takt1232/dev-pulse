@@ -25,7 +25,7 @@ import {
   getDocs,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { ActivityItem, Comment, Notification, Task, User } from './types';
+import { ActivityItem, Comment, Notification, Project, Task, User } from './types';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -42,6 +42,7 @@ export const db = firebaseConfig.firestoreDatabaseId
 // Collection References
 export const COLLECTIONS = {
   USERS: 'users',
+  PROJECTS: 'projects',
   TASKS: 'tasks',
   COMMENTS: 'comments',
   ACTIVITIES: 'activities',
@@ -215,7 +216,47 @@ export const upsertUserProfileInFirestore = async (user: User) => {
   await setDoc(ref, user, { merge: true });
 };
 
+export const updateUserRoleInFirestore = async (userId: string, role: string) => {
+  const ref = doc(db, COLLECTIONS.USERS, userId);
+  await updateDoc(ref, { role });
+};
+
+// ----------------- FIRESTORE PROJECT ACTIONS -----------------
+
+export const createProjectInFirestore = async (project: Project) => {
+  const ref = doc(db, COLLECTIONS.PROJECTS, project.id);
+  await setDoc(ref, project);
+};
+
+export const updateProjectInFirestore = async (projectId: string, updates: Partial<Project>) => {
+  const ref = doc(db, COLLECTIONS.PROJECTS, projectId);
+  await updateDoc(ref, {
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  });
+};
+
+export const deleteProjectInFirestore = async (projectId: string) => {
+  const ref = doc(db, COLLECTIONS.PROJECTS, projectId);
+  await deleteDoc(ref);
+};
+
 // ----------------- REAL-TIME SUBSCRIPTIONS -----------------
+
+export const subscribeToProjects = (
+  callback: (projects: Project[]) => void,
+  onError?: (err: Error) => void
+) => {
+  const q = query(collection(db, COLLECTIONS.PROJECTS), orderBy('createdAt', 'asc'));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const projects = snapshot.docs.map((d) => d.data() as Project);
+      callback(projects);
+    },
+    onError
+  );
+};
 
 export const subscribeToUsers = (
   callback: (users: User[]) => void,

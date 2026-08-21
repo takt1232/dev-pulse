@@ -1,42 +1,6 @@
 import { TaskPriority, TaskStatus, TaskType, User } from '../types';
 
-export const USERS: User[] = [
-  {
-    id: 'user-1',
-    name: 'Alex Rivera',
-    email: 'alex.rivera@devteam.io',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    role: 'Lead Architect',
-  },
-  {
-    id: 'user-2',
-    name: 'Sarah Chen',
-    email: 'sarah.chen@devteam.io',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
-    role: 'Frontend Engineer',
-  },
-  {
-    id: 'user-3',
-    name: 'Marcus Vance',
-    email: 'marcus.v@devteam.io',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    role: 'Backend / Platform',
-  },
-  {
-    id: 'user-4',
-    name: 'Maria Santos',
-    email: 'maria.santos@devteam.io',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-    role: 'QA & Product Specialist',
-  },
-  {
-    id: 'user-5',
-    name: 'Liam Keller',
-    email: 'liam.k@devteam.io',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-    role: 'DevOps & SRE',
-  },
-];
+export const USERS: User[] = [];
 
 export const STATUSES: { id: TaskStatus; label: string; color: string; bg: string; dot: string }[] = [
   { id: 'backlog', label: 'Backlog', color: 'text-slate-600', bg: 'bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700', dot: 'bg-slate-400' },
