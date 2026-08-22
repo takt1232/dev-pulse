@@ -47,6 +47,7 @@ import {
   logoutUser,
   createProjectInFirestore,
   updateProjectInFirestore,
+  deleteProjectInFirestore,
 } from './firebase';
 
 import { AlertCircle } from 'lucide-react';
@@ -877,6 +878,7 @@ export default function App() {
           {viewMode === 'list' && (
             <ListView
               tasks={filteredTasks}
+              projects={projects}
               comments={comments}
               onSelectTask={setSelectedTask}
               onUpdateTask={handleUpdateTask}
@@ -935,6 +937,14 @@ export default function App() {
             };
             await createProjectInFirestore(newProject);
             setActiveProjectId(newProject.id);
+          }
+        }}
+        onDeleteProject={async (projectId) => {
+          await deleteProjectInFirestore(projectId);
+          // If we delete the active project, switch to the first available project, or null
+          if (activeProjectId === projectId) {
+            const remaining = projects.filter(p => p.id !== projectId);
+            setActiveProjectId(remaining.length > 0 ? remaining[0].id : null);
           }
         }}
       />

@@ -29,6 +29,7 @@ interface ListViewProps {
   onSelectAll: (allIds: string[]) => void;
   onClearSelection: () => void;
   allUsers?: User[];
+  projects?: Project[];
   activeUser: User;
   activeProject?: Project | null;
 }
@@ -47,6 +48,7 @@ export const ListView: React.FC<ListViewProps> = ({
   onSelectAll,
   onClearSelection,
   allUsers = [],
+  projects = [],
   activeUser,
   activeProject,
 }) => {
@@ -251,6 +253,8 @@ export const ListView: React.FC<ListViewProps> = ({
                 const priorityObj = PRIORITIES.find((p) => p.id === task.priority);
                 const statusObj = STATUSES.find((s) => s.id === task.status);
                 const commentsCount = comments.filter((c) => c.taskId === task.id).length;
+                const taskProject = projects.find(p => p.id === task.projectId);
+                const hasAdminRights = isOwnerUser(activeUser) || (taskProject ? taskProject.ownerId === activeUser.id : false);
 
                 return (
                   <tr
@@ -360,7 +364,7 @@ export const ListView: React.FC<ListViewProps> = ({
                         value={task.status}
                         onChange={(e) => {
                           const newStatus = e.target.value as TaskStatus;
-                          if (!isOwner && newStatus === 'done') return;
+                          if (!hasAdminRights && newStatus === 'done') return;
                           onUpdateTask({
                             ...task,
                             status: newStatus,
@@ -373,9 +377,9 @@ export const ListView: React.FC<ListViewProps> = ({
                           <option
                             key={s.id}
                             value={s.id}
-                            disabled={!isOwner && s.id === 'done'}
+                            disabled={!hasAdminRights && s.id === 'done'}
                           >
-                            {s.label} {!isOwner && s.id === 'done' ? '🔒' : ''}
+                            {s.label} {!hasAdminRights && s.id === 'done' ? '🔒' : ''}
                           </option>
                         ))}
                       </select>
@@ -383,7 +387,7 @@ export const ListView: React.FC<ListViewProps> = ({
 
                     {/* Assignee */}
                     <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
-                      {isOwner ? (
+                      {hasAdminRights ? (
                         <select
                           value={task.assigneeId || ''}
                           onChange={(e) =>
@@ -396,7 +400,12 @@ export const ListView: React.FC<ListViewProps> = ({
                           className="text-[11px] font-medium px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 max-w-[130px] truncate cursor-pointer"
                         >
                           <option value="">Unassigned</option>
-                          {allUsers.map((u) => (
+                          {allUsers
+                            .filter(u => {
+                              if (!taskProject) return true;
+                              return taskProject.ownerId === u.id || (taskProject.collaboratorIds || []).includes(u.id);
+                            })
+                            .map((u) => (
                             <option key={u.id} value={u.id}>
                               {u.name}
                             </option>
@@ -425,38 +434,40 @@ export const ListView: React.FC<ListViewProps> = ({
 
                     {/* Actions Column */}
                     <td className="py-3 px-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      {deletingTaskId === task.id ? (
-                        <div className="flex items-center justify-end gap-1">
+                      {(hasAdminRights || task.reporterId === activeUser.id) ? (
+                        deletingTaskId === task.id ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onDeleteTask?.(task.id);
+                                setDeletingTaskId(null);
+                              }}
+                              className="px-2 py-1 text-[10px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md transition-colors shadow-xs"
+                              title="Confirm delete"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTaskId(null)}
+                              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
-                            onClick={() => {
-                              onDeleteTask?.(task.id);
-                              setDeletingTaskId(null);
-                            }}
-                            className="px-2 py-1 text-[10px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md transition-colors shadow-xs"
-                            title="Confirm delete"
+                            onClick={() => setDeletingTaskId(task.id)}
+                            className="p-1 rounded-md text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            title="Delete task"
                           >
-                            Delete
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeletingTaskId(null)}
-                            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                            title="Cancel"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setDeletingTaskId(task.id)}
-                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                          title="Delete task"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                        )
+                      ) : null}
                     </td>
                   </tr>
                 );

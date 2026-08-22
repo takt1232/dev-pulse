@@ -14,6 +14,7 @@ interface ProjectModalProps {
   }) => Promise<void>;
   projectToEdit?: Project | null;
   currentUser: User;
+  onDeleteProject?: (projectId: string) => Promise<void>;
 }
 
 const PROJECT_COLORS = [
@@ -37,6 +38,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   onSubmit,
   projectToEdit,
   currentUser,
+  onDeleteProject,
 }) => {
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
@@ -45,6 +47,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [icon, setIcon] = useState(PROJECT_ICONS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (projectToEdit) {
@@ -61,7 +67,27 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       setIcon(PROJECT_ICONS[Math.floor(Math.random() * PROJECT_ICONS.length)]);
     }
     setError(null);
+    setShowDeleteConfirm(false);
+    setDeleteConfirmText('');
   }, [projectToEdit, isOpen]);
+
+  const handleDelete = async () => {
+    if (!projectToEdit || !onDeleteProject) return;
+    if (deleteConfirmText !== projectToEdit.name) {
+      setError('Project name does not match.');
+      return;
+    }
+    try {
+      setIsDeleting(true);
+      setError(null);
+      await onDeleteProject(projectToEdit.id);
+      onClose();
+    } catch (e: any) {
+      setError(e.message || 'Failed to delete project');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Auto-generate project key from name if creating new
   const handleNameChange = (val: string) => {
@@ -261,26 +287,86 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           </div>
 
           {/* Footer Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {isSubmitting
-                ? 'Saving...'
-                : projectToEdit
-                ? 'Save Changes'
-                : 'Create Project Workspace'}
-            </button>
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div>
+              {projectToEdit && onDeleteProject && !showDeleteConfirm && (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="px-4 py-2 text-xs font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
+                >
+                  Delete Project
+                </button>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting || showDeleteConfirm}
+                className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isSubmitting
+                  ? 'Saving...'
+                  : projectToEdit
+                  ? 'Save Changes'
+                  : 'Create Project'}
+              </button>
+            </div>
           </div>
+          
+          {/* Delete Confirmation Inline */}
+          {showDeleteConfirm && (
+            <div className="mt-4 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50">
+              <h3 className="text-sm font-bold text-rose-800 dark:text-rose-300 mb-2">Delete Project?</h3>
+              <p className="text-xs text-rose-700 dark:text-rose-400 mb-3">
+                This action is irreversible. All tasks and data within this project will remain in the database but will lose their project association. Type <strong>{projectToEdit?.name}</strong> to confirm.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (deleteConfirmText === projectToEdit?.name && !isDeleting) {
+                        handleDelete();
+                      }
+                    }
+                  }}
+                  placeholder={projectToEdit?.name || ''}
+                  className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteConfirmText('');
+                    setError(null);
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={isDeleting || deleteConfirmText !== projectToEdit?.name}
+                  className="px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-all"
+                >
+                  {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+                </button>
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>

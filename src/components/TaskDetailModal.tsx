@@ -895,11 +895,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       className="flex-1 min-w-0 px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
                     >
                       <option value="">Unassigned (Triage)</option>
-                      {userPool.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name} ({user.role})
-                        </option>
-                      ))}
+                      {userPool
+                        .filter(u => {
+                          if (!taskProject) return true;
+                          return taskProject.ownerId === u.id || (taskProject.collaboratorIds || []).includes(u.id);
+                        })
+                        .map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name} ({user.role})
+                          </option>
+                        ))}
                     </select>
                   ) : (
                     <div

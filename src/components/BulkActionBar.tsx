@@ -133,11 +133,20 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                     Assign To...
                   </option>
                   <option value="none">Unassigned</option>
-                  {allUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
+                  {allUsers
+                    .filter(u => {
+                      return selectedTaskIds.some(taskId => {
+                        const t = tasks.find(tsk => tsk.id === taskId);
+                        const p = t ? projects.find(proj => proj.id === t.projectId) : null;
+                        if (!p) return true;
+                        return p.ownerId === u.id || (p.collaboratorIds || []).includes(u.id);
+                      });
+                    })
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
                 </select>
               ) : null}
 
