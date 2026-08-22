@@ -27,7 +27,7 @@ import {
   Crown,
   AlertCircle,
 } from 'lucide-react';
-import { ActivityItem, Attachment, Comment, isOwnerUser, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
+import { ActivityItem, Attachment, Comment, isOwnerUser, Project, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
 import { COMMON_LABELS, PRIORITIES, STATUSES, TYPES } from '../utils/constants';
 import { MarkdownRenderer } from '../utils/markdown';
 
@@ -44,6 +44,7 @@ interface TaskDetailModalProps {
   onConvertCommentToTask: (commentContent: string, parentTaskKey: string) => void;
   activities: ActivityItem[];
   activeUser: User;
+  projects?: Project[];
   allUsers?: User[];
 }
 
@@ -60,16 +61,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onConvertCommentToTask,
   activities,
   activeUser,
+  projects = [],
   allUsers = [],
 }) => {
-  if (!isOpen || !task) return null;
-
-  const isOwner = isOwnerUser(activeUser);
+  const taskProject = task ? projects.find((p) => p.id === task.projectId) : null;
+  const isOwner = isOwnerUser(activeUser) || (taskProject ? taskProject.ownerId === activeUser.id : false);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [titleText, setTitleText] = useState(task.title);
+  const [titleText, setTitleText] = useState(task?.title || '');
   const [isEditingDesc, setIsEditingDesc] = useState(false);
-  const [descText, setDescText] = useState(task.description);
+  const [descText, setDescText] = useState(task?.description || '');
   const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments');
   const [commentInput, setCommentInput] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
@@ -89,16 +90,20 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   // Sync state when task changes
   useEffect(() => {
-    setTitleText(task.title);
-    setDescText(task.description);
-    setIsEditingTitle(false);
-    setIsEditingDesc(false);
-    setCommentInput('');
-    setPermissionNotice(null);
-  }, [task.id]);
+    if (task) {
+      setTitleText(task.title);
+      setDescText(task.description);
+      setIsEditingTitle(false);
+      setIsEditingDesc(false);
+      setCommentInput('');
+      setPermissionNotice(null);
+    }
+  }, [task?.id]);
 
   // Handle paste for screenshots anywhere inside task detail
   useEffect(() => {
+    if (!isOpen || !task) return;
+
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -133,7 +138,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [task, onUpdateTask]);
+  }, [task, onUpdateTask, isOpen]);
+
+  if (!isOpen || !task) return null;
 
   const handleTitleSave = () => {
     if (titleText.trim() && titleText !== task.title) {
@@ -885,7 +892,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     <select
                       value={task.assigneeId || ''}
                       onChange={(e) => handleAssigneeChange(e.target.value || null)}
-                      className="flex-1 px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
+                      className="flex-1 min-w-0 px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
                     >
                       <option value="">Unassigned (Triage)</option>
                       {userPool.map((user) => (
@@ -896,7 +903,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     </select>
                   ) : (
                     <div
-                      className="flex-1 px-2.5 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium flex items-center justify-between cursor-not-allowed opacity-90"
+                      className="flex-1 min-w-0 px-2.5 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium flex items-center justify-between cursor-not-allowed opacity-90"
                       title="Collaborators cannot reassign tasks. Only Owners can assign team members."
                     >
                       <span className="truncate">

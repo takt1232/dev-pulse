@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { CheckSquare, X, Users, ArrowRight, Flag, Trash2, CheckCircle2, Lock } from 'lucide-react';
-import { isOwnerUser, TaskPriority, TaskStatus, User } from '../types';
+import { isOwnerUser, Project, Task, TaskPriority, TaskStatus, User } from '../types';
 import { PRIORITIES, STATUSES } from '../utils/constants';
 
 interface BulkActionBarProps {
   selectedCount: number;
+  selectedTaskIds?: string[];
+  tasks?: Task[];
+  projects?: Project[];
   onClearSelection: () => void;
   onBulkStatusChange: (status: TaskStatus) => void;
   onBulkAssign: (assigneeId: string | null) => void;
@@ -16,6 +19,9 @@ interface BulkActionBarProps {
 
 export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   selectedCount,
+  selectedTaskIds = [],
+  tasks = [],
+  projects = [],
   onClearSelection,
   onBulkStatusChange,
   onBulkAssign,
@@ -25,7 +31,13 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   activeUser,
 }) => {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-  const isOwner = isOwnerUser(activeUser);
+  
+  // Check if user has admin rights on ANY of the selected tasks
+  const hasAdminRights = isOwnerUser(activeUser) || selectedTaskIds.some(id => {
+    const t = tasks.find(tsk => tsk.id === id);
+    const p = t ? projects.find(proj => proj.id === t.projectId) : null;
+    return p ? p.ownerId === activeUser.id : false;
+  });
 
   if (selectedCount === 0) return null;
 
@@ -83,7 +95,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                 onChange={(e) => {
                   if (e.target.value) {
                     const s = e.target.value as TaskStatus;
-                    if (!isOwner && s === 'done') return;
+                    if (!hasAdminRights && s === 'done') return;
                     onBulkStatusChange(s);
                     e.target.value = '';
                   }
@@ -98,15 +110,15 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                   <option
                     key={s.id}
                     value={s.id}
-                    disabled={!isOwner && s.id === 'done'}
+                    disabled={!hasAdminRights && s.id === 'done'}
                   >
-                    → {s.label} {!isOwner && s.id === 'done' ? '🔒' : ''}
+                    → {s.label} {!hasAdminRights && s.id === 'done' ? '🔒' : ''}
                   </option>
                 ))}
               </select>
 
               {/* Assignee Change - Only for Owners */}
-              {isOwner ? (
+              {hasAdminRights ? (
                 <select
                   onChange={(e) => {
                     if (e.target.value !== '') {

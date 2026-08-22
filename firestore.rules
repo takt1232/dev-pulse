@@ -19,6 +19,12 @@ service cloud.firestore {
       );
     }
 
+    function isProjectOwner(projectId) {
+      return projectId != null &&
+             exists(/databases/$(database)/documents/projects/$(projectId)) &&
+             get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid;
+    }
+
     // User profile documents
     match /users/{userId} {
       allow read: if isAuthenticated();
@@ -53,7 +59,7 @@ service cloud.firestore {
 
       // Creation rule: Collaborators cannot set initial status to 'done' or assign other users
       allow create: if isAuthenticated() && (
-        isOwner() || (
+        isOwner() || isProjectOwner(request.resource.data.projectId) || (
           request.resource.data.status != 'done' &&
           (request.resource.data.assigneeId == null || request.resource.data.assigneeId == request.auth.uid)
         )
@@ -61,7 +67,7 @@ service cloud.firestore {
 
       // Update rule: Only Owner can set status to 'done' or change assignee
       allow update: if isAuthenticated() && (
-        isOwner() || (
+        isOwner() || isProjectOwner(resource.data.projectId) || (
           // Collaborator must not change status to 'done'
           request.resource.data.status != 'done' &&
           // Collaborator cannot reassign or change assigneeId
@@ -71,7 +77,7 @@ service cloud.firestore {
 
       // Delete rule: Owner or original reporter
       allow delete: if isAuthenticated() && (
-        isOwner() || resource.data.reporterId == request.auth.uid
+        isOwner() || isProjectOwner(resource.data.projectId) || resource.data.reporterId == request.auth.uid
       );
     }
 

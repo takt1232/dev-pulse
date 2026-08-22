@@ -17,14 +17,15 @@ import {
   ChevronUp,
   Lock,
 } from 'lucide-react';
-import { Attachment, isOwnerUser, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
+import { Attachment, isOwnerUser, Project, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
 import { COMMON_LABELS, PRIORITIES, STATUSES, TYPES } from '../utils/constants';
 
 interface QuickAddModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTask: (task: Omit<Task, 'id' | 'key' | 'createdAt' | 'updatedAt' | 'order'>) => void;
+  onAddTask: (task: Omit<Task, 'id' | 'key' | 'createdAt' | 'updatedAt' | 'order' | 'projectId'>) => void;
   activeUser: User;
+  activeProject?: Project | null;
   allUsers?: User[];
   initialStatus?: TaskStatus;
 }
@@ -34,10 +35,11 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   onClose,
   onAddTask,
   activeUser,
+  activeProject,
   allUsers = [],
   initialStatus = 'backlog',
 }) => {
-  const isOwner = isOwnerUser(activeUser);
+  const isOwner = isOwnerUser(activeUser) || (activeProject ? activeProject.ownerId === activeUser.id : false);
   const safeInitialStatus = !isOwner && initialStatus === 'done' ? 'backlog' : initialStatus;
 
   const [title, setTitle] = useState('');

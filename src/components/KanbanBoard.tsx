@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Plus, MoreHorizontal, CheckCircle2, ChevronRight, ChevronDown, Lock, AlertCircle } from 'lucide-react';
-import { Comment, isOwnerUser, SwimlaneMode, Task, TaskStatus, User } from '../types';
+import { Comment, isOwnerUser, Project, SwimlaneMode, Task, TaskStatus, User } from '../types';
 import { STATUSES, TYPES } from '../utils/constants';
 import { TaskCard } from './TaskCard';
 
@@ -16,6 +16,7 @@ interface KanbanBoardProps {
   onToggleSelectTask: (taskId: string, e: React.MouseEvent) => void;
   allUsers?: User[];
   activeUser: User;
+  activeProject?: Project | null;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -29,6 +30,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onToggleSelectTask,
   allUsers = [],
   activeUser,
+  activeProject,
 }) => {
   const safeTasks = Array.isArray(tasks) ? tasks : [];
   const safeComments = Array.isArray(comments) ? comments : [];
@@ -37,7 +39,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [collapsedSwimlanes, setCollapsedSwimlanes] = useState<Record<string, boolean>>({});
   const [rbacWarning, setRbacWarning] = useState<string | null>(null);
 
-  const isOwner = isOwnerUser(activeUser);
+  const isOwner = isOwnerUser(activeUser) || (activeProject ? activeProject.ownerId === activeUser.id : false);
 
   const handleDragStart = (e: React.DragEvent, task: Task) => {
     e.dataTransfer.setData('text/plain', task.id);

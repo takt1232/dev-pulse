@@ -15,7 +15,7 @@ import {
   X,
   Lock,
 } from 'lucide-react';
-import { Comment, isOwnerUser, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
+import { Comment, isOwnerUser, Project, Task, TaskPriority, TaskStatus, TaskType, User } from '../types';
 import { PRIORITIES, STATUSES, TYPES } from '../utils/constants';
 
 interface ListViewProps {
@@ -30,6 +30,7 @@ interface ListViewProps {
   onClearSelection: () => void;
   allUsers?: User[];
   activeUser: User;
+  activeProject?: Project | null;
 }
 
 type SortField = 'key' | 'title' | 'type' | 'priority' | 'status' | 'assignee' | 'updatedAt';
@@ -47,12 +48,13 @@ export const ListView: React.FC<ListViewProps> = ({
   onClearSelection,
   allUsers = [],
   activeUser,
+  activeProject,
 }) => {
   const [sortField, setSortField] = useState<SortField>('updatedAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
 
-  const isOwner = isOwnerUser(activeUser);
+  const isOwner = isOwnerUser(activeUser) || (activeProject ? activeProject.ownerId === activeUser.id : false);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {

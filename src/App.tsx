@@ -468,7 +468,9 @@ export default function App() {
   const handleMoveTaskStatus = (taskId: string, targetStatus: TaskStatus) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
-    if (!isOwner && targetStatus === 'done') {
+    const taskProject = projects.find(p => p.id === task.projectId);
+    const hasAdminRights = isOwner || (taskProject ? taskProject.ownerId === activeUser.id : false);
+    if (!hasAdminRights && targetStatus === 'done') {
       return;
     }
     handleUpdateTask({
@@ -578,9 +580,15 @@ export default function App() {
   };
 
   const handleBulkStatusChange = async (newStatus: TaskStatus) => {
-    if (!isOwner && newStatus === 'done') return;
-    const idsToUpdate = [...selectedTaskIds];
+    const idsToUpdate = selectedTaskIds.filter(id => {
+      if (newStatus !== 'done' || isOwner) return true;
+      const t = tasks.find(tsk => tsk.id === id);
+      const p = t ? projects.find(proj => proj.id === t.projectId) : null;
+      return p ? p.ownerId === activeUser.id : false;
+    });
+    
     setSelectedTaskIds([]);
+    if (!idsToUpdate.length) return;
     try {
       await bulkUpdateTasksInFirestore(idsToUpdate, { status: newStatus });
     } catch (e) {
@@ -589,9 +597,15 @@ export default function App() {
   };
 
   const handleBulkAssign = async (newAssigneeId: string | null) => {
-    if (!isOwner) return;
-    const idsToUpdate = [...selectedTaskIds];
+    const idsToUpdate = selectedTaskIds.filter(id => {
+      if (isOwner) return true;
+      const t = tasks.find(tsk => tsk.id === id);
+      const p = t ? projects.find(proj => proj.id === t.projectId) : null;
+      return p ? p.ownerId === activeUser.id : false;
+    });
+
     setSelectedTaskIds([]);
+    if (!idsToUpdate.length) return;
     try {
       await bulkUpdateTasksInFirestore(idsToUpdate, { assigneeId: newAssigneeId });
     } catch (e) {
@@ -610,8 +624,17 @@ export default function App() {
   };
 
   const handleBulkDelete = async () => {
-    const idsToDelete = [...selectedTaskIds];
+    const idsToDelete = selectedTaskIds.filter(id => {
+      if (isOwner) return true;
+      const t = tasks.find(tsk => tsk.id === id);
+      if (!t) return false;
+      const p = projects.find(proj => proj.id === t.projectId);
+      const isProjectOwner = p ? p.ownerId === activeUser.id : false;
+      return isProjectOwner || t.reporterId === activeUser.id;
+    });
+
     setSelectedTaskIds([]);
+    if (!idsToDelete.length) return;
     try {
       await bulkDeleteTasksInFirestore(idsToDelete);
     } catch (e) {
@@ -647,7 +670,11 @@ export default function App() {
       }
 
       // RBAC Visibility Rule
-      if (!isOwner) {
+      const taskProject = projects.find(p => p.id === task.projectId);
+      const isProjectOwner = taskProject ? taskProject.ownerId === activeUser.id : false;
+      const hasAdminRights = isOwner || isProjectOwner;
+
+      if (!hasAdminRights) {
         const isReporter = task.reporterId === activeUser.id;
         const isAssignee = task.assigneeId === activeUser.id;
         if (!isReporter && !isAssignee) {
@@ -657,7 +684,7 @@ export default function App() {
 
       return true;
     });
-  }, [tasks, activeProject, isOwner, activeUser.id]);
+  }, [tasks, activeProject, isOwner, activeUser.id, projects]);
 
   // Filtered Tasks computation
   const filteredTasks = useMemo(() => {
@@ -843,6 +870,7 @@ export default function App() {
               onToggleSelectTask={handleToggleSelectTask}
               allUsers={users}
               activeUser={activeUser}
+              activeProject={activeProject}
             />
           )}
 
@@ -859,6 +887,7 @@ export default function App() {
               onClearSelection={() => setSelectedTaskIds([])}
               allUsers={users}
               activeUser={activeUser}
+              activeProject={activeProject}
             />
           )}
 
@@ -928,6 +957,7 @@ export default function App() {
         onClose={() => setIsQuickAddOpen(false)}
         onAddTask={handleAddTask}
         activeUser={activeUser}
+        activeProject={activeProject}
         initialStatus={quickAddInitialStatus}
         allUsers={users}
       />
@@ -945,6 +975,7 @@ export default function App() {
         onConvertCommentToTask={handleConvertCommentToTask}
         activities={activities}
         activeUser={activeUser}
+        projects={projects}
         allUsers={users}
       />
 
@@ -953,6 +984,9 @@ export default function App() {
       {/* Floating Bulk Actions Bar */}
       <BulkActionBar
         selectedCount={selectedTaskIds.length}
+        selectedTaskIds={selectedTaskIds}
+        tasks={tasks}
+        projects={projects}
         onClearSelection={() => setSelectedTaskIds([])}
         onBulkStatusChange={handleBulkStatusChange}
         onBulkAssign={handleBulkAssign}
